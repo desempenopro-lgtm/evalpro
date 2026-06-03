@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EvalPro — Sistema de Evaluaciones 360</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════ AUTH SCREEN ═══════════════ -->
+<div id="auth-screen">
+  <div class="auth-left">
+    <div class="auth-brand">
+      <div class="auth-logo">EvalPro</div>
+      <div class="auth-tagline">Sistema de evaluaciones 360° · 180° · 90°</div>
+    </div>
+    <div class="auth-features">
+      <div class="auth-feat"><div class="auth-feat-dot"></div>Evaluaciones multifuente completas</div>
+      <div class="auth-feat"><div class="auth-feat-dot"></div>Control de acceso por roles</div>
+      <div class="auth-feat"><div class="auth-feat-dot"></div>Reportes con gráficas radar</div>
+      <div class="auth-feat"><div class="auth-feat-dot"></div>Sincronización con Firebase en tiempo real</div>
+      <div class="auth-feat"><div class="auth-feat-dot"></div>Login con email o Google</div>
+    </div>
+  </div>
+
+  <div class="auth-right">
+    <!-- Paso 1: Config Firebase -->
+    <div id="cfg-step">
+      <div class="auth-title">Configurar Firebase</div>
+      <div class="auth-sub">Ingresa los datos de tu proyecto para continuar</div>
+      <div class="inp-wrap"><label>API Key</label><input id="fb-apiKey" placeholder="AIzaSy..."/></div>
+      <div class="inp-wrap"><label>Auth Domain</label><input id="fb-authDomain" placeholder="proyecto.firebaseapp.com"/></div>
+      <div class="inp-wrap"><label>Project ID</label><input id="fb-projectId" placeholder="mi-proyecto-id"/></div>
+      <div class="inp-wrap"><label>Storage Bucket</label><input id="fb-storageBucket" placeholder="proyecto.appspot.com"/></div>
+      <div class="inp-wrap"><label>Messaging Sender ID</label><input id="fb-msgSenderId" placeholder="123456789"/></div>
+      <div class="inp-wrap"><label>App ID</label><input id="fb-appId" placeholder="1:123:web:abc..."/></div>
+      <div class="auth-err" id="cfg-err"></div>
+      <button class="btn-login-full" onclick="initFirebase()">Conectar y continuar</button>
+      <div class="auth-divider">o</div>
+      <button class="btn-google" onclick="useDemoMode()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        Usar modo demo (sin Firebase)
+      </button>
+    </div>
+
+    <!-- Paso 2: Login / Registro -->
+    <div id="login-step" style="display:none">
+      <div class="auth-title">Bienvenido</div>
+      <div class="auth-sub" id="auth-proj">Inicia sesión para continuar</div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" onclick="swTab('login')">Iniciar sesión</button>
+        <button class="auth-tab" onclick="swTab('register')">Registrarse</button>
+      </div>
+      <div class="auth-err" id="auth-err"></div>
+
+      <div id="tab-login">
+        <div class="inp-wrap"><label>Email</label><input id="l-email" type="email" placeholder="usuario@empresa.com" onkeydown="if(event.key==='Enter')doLogin()"/></div>
+        <div class="inp-wrap"><label>Contraseña</label><input id="l-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"/></div>
+        <button class="btn-login-full" id="btn-li" onclick="doLogin()">Iniciar sesión</button>
+        <div class="auth-divider">o continúa con</div>
+        <button class="btn-google" onclick="doGoogle()">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Continuar con Google
+        </button>
+      </div>
+
+      <div id="tab-reg" style="display:none">
+        <div class="inp-wrap"><label>Nombre completo</label><input id="r-name" placeholder="Ana García"/></div>
+        <div class="inp-wrap"><label>Email</label><input id="r-email" type="email" placeholder="usuario@empresa.com"/></div>
+        <div class="inp-wrap"><label>Contraseña</label><input id="r-pass" type="password" placeholder="mínimo 6 caracteres"/></div>
+        <div class="inp-wrap"><label>Rol en el sistema</label>
+          <select id="r-role">
+            <option value="evaluador">Evaluador — Responde formularios</option>
+            <option value="evaluado">Evaluado — Consulta mis reportes</option>
+            <option value="rrhh">RRHH — Gestiona evaluaciones</option>
+            <option value="admin">Admin — Acceso total</option>
+          </select>
+        </div>
+        <button class="btn-login-full" id="btn-reg" onclick="doRegister()">Crear cuenta</button>
+        <div class="auth-divider">o continúa con</div>
+        <button class="btn-google" onclick="doGoogle()">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Continuar con Google
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ APP SCREEN ═══════════════ -->
+<div id="app-screen">
+<div class="shell">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="logo"><div class="logo-mark">EvalPro</div><div class="logo-sub">360 · 180 · 90</div></div>
+    <div class="nav">
+      <div class="nav-sec">Principal</div>
+      <button class="nav-item active" id="ni-dashboard" onclick="showPage('dashboard')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Dashboard
+      </button>
+      <button class="nav-item hid" id="ni-evaluaciones" onclick="showPage('evaluaciones')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>Evaluaciones
+      </button>
+      <button class="nav-item hid" id="ni-empleados" onclick="showPage('empleados')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Empleados
+      </button>
+      <div class="nav-sec">Proceso</div>
+      <button class="nav-item hid" id="ni-formulario" onclick="showPage('formulario')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Formulario
+      </button>
+      <button class="nav-item hid" id="ni-reportes" onclick="showPage('reportes')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>Reportes
+      </button>
+      <div class="nav-sec hid" id="ni-sec-admin">Administración</div>
+      <button class="nav-item hid" id="ni-usuarios" onclick="showPage('usuarios')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 15c-3.31 0-6 1.34-6 3v1h12v-1c0-1.66-2.69-3-6-3z"/><circle cx="12" cy="8" r="4"/><path d="M20 15v1M20 8a4 4 0 010 8"/></svg>Usuarios
+      </button>
+    </div>
+    <div class="user-bar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="avatar" id="sb-av">—</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="sb-name">—</div>
+          <div id="sb-role"></div>
+        </div>
+        <button class="btn btn-g btn-sm" onclick="doLogout()" title="Cerrar sesión" style="padding:5px 8px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="pg-hdr">
+        <div><div class="pg-title">Dashboard</div><div class="pg-sub" id="dash-welcome">—</div></div>
+        <button class="btn btn-p hid" id="btn-new-eval" onclick="showPage('evaluaciones');openNewEval()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nueva evaluación
+        </button>
+      </div>
+      <div class="cg" id="dash-stats"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="card"><div style="font-size:14px;font-weight:500;margin-bottom:16px">Distribución por tipo</div><div style="position:relative;height:260px"><canvas id="chartTipos"></canvas></div></div>
+        <div class="card"><div style="font-size:14px;font-weight:500;margin-bottom:16px">Evaluaciones recientes</div><div id="recent-list"></div></div>
+      </div>
+    </div>
+
+    <!-- EVALUACIONES -->
+    <div class="page" id="page-evaluaciones">
+      <div class="pg-hdr">
+        <div><div class="pg-title">Evaluaciones</div><div class="pg-sub">Gestión de ciclos</div></div>
+        <button class="btn btn-p hid" id="btn-ev-new" onclick="openNewEval()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nueva evaluación
+        </button>
+      </div>
+      <div class="card"><div class="tw"><table>
+        <thead><tr><th>Nombre</th><th>Tipo</th><th>Evaluado</th><th>Progreso</th><th>Estado</th><th>Acciones</th></tr></thead>
+        <tbody id="eval-tbody"></tbody>
+      </table></div></div>
+    </div>
+
+    <!-- EMPLEADOS -->
+    <div class="page" id="page-empleados">
+      <div class="pg-hdr">
+        <div><div class="pg-title">Empleados</div><div class="pg-sub">Directorio de colaboradores</div></div>
+        <button class="btn btn-p hid" id="btn-emp-new" onclick="openNewEmpleado()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Agregar empleado
+        </button>
+      </div>
+      <div class="card">
+        <div style="margin-bottom:16px"><input id="emp-search" placeholder="Buscar por nombre, cargo o área..." oninput="filterEmps()" style="width:100%;max-width:380px"/></div>
+        <div class="tw"><table>
+          <thead><tr><th>Empleado</th><th>Cargo</th><th>Área</th><th>Email</th><th>Acciones</th></tr></thead>
+          <tbody id="emp-tbody"></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- FORMULARIO -->
+    <div class="page" id="page-formulario">
+      <div class="pg-hdr"><div><div class="pg-title">Formulario de evaluación</div><div class="pg-sub">Responde las evaluaciones asignadas</div></div></div>
+      <div class="card" style="max-width:700px">
+        <div style="display:flex;gap:12px;margin-bottom:24px;align-items:flex-end">
+          <div class="fi" style="flex:1"><label>Evaluación</label><select id="form-eval" onchange="loadForm()"><option value="">— selecciona —</option></select></div>
+          <div class="fi" style="flex:1"><label>Tu relación con el evaluado</label>
+            <select id="form-rel">
+              <option value="jefe">Jefe directo</option><option value="par">Par / colega</option>
+              <option value="subordinado">Subordinado</option><option value="autoevaluacion">Autoevaluación</option>
+              <option value="cliente">Cliente interno</option>
+            </select>
+          </div>
+        </div>
+        <div id="form-body" style="display:none">
+          <div style="padding:14px 16px;background:var(--bg3);border-radius:var(--radius);margin-bottom:22px;display:flex;align-items:center;gap:12px">
+            <div class="avatar" id="form-av">—</div>
+            <div><div style="font-weight:500" id="form-ev-name">—</div><div style="font-size:12px;color:var(--text3)" id="form-ev-cargo">—</div></div>
+            <div style="margin-left:auto" id="form-badge"></div>
+          </div>
+          <div id="form-comps"></div>
+          <div class="fi" style="margin-top:16px"><label>Comentarios abiertos (opcional)</label><textarea id="form-comments" placeholder="Fortalezas, áreas de mejora, sugerencias..."></textarea></div>
+          <div style="display:flex;justify-content:flex-end;margin-top:20px"><button class="btn btn-p" onclick="saveResponse()">Guardar evaluación</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPORTES -->
+    <div class="page" id="page-reportes">
+      <div class="pg-hdr"><div><div class="pg-title">Reportes</div><div class="pg-sub">Resultados por empleado</div></div></div>
+      <div style="margin-bottom:24px"><div class="fi" style="max-width:340px"><label>Seleccionar evaluación</label><select id="rep-eval" onchange="loadReport()"><option value="">— selecciona —</option></select></div></div>
+      <div id="rep-body" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div class="card"><div style="font-size:14px;font-weight:500;margin-bottom:16px">Puntuación por competencia</div><div style="position:relative;height:320px"><canvas id="chartRadar"></canvas></div></div>
+          <div class="card"><div style="font-size:14px;font-weight:500;margin-bottom:16px">Comparativa por fuente</div><div style="position:relative;height:300px"><canvas id="chartFuentes"></canvas></div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px">
+          <div class="card">
+            <div style="font-size:14px;font-weight:500;margin-bottom:16px">Puntaje global</div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:20px 0">
+              <div style="font-size:40px;font-weight:300;color:var(--accent2)" id="rep-score">—</div>
+              <div style="font-size:14px;color:var(--text3)">/ 5.0</div>
+              <div style="margin-top:12px;font-size:13px;color:var(--text3);text-align:center" id="rep-label">—</div>
+            </div>
+            <div style="margin-top:20px"><div class="sl">Respondentes</div><div id="rep-respondents" style="background:var(--bg3);border-radius:var(--radius)"></div></div>
+          </div>
+          <div class="card"><div style="font-size:14px;font-weight:500;margin-bottom:16px">Detalle por competencia</div><div id="rep-detail"></div></div>
+        </div>
+      </div>
+      <div id="rep-empty" style="text-align:center;padding:60px;color:var(--text3)"><p>Selecciona una evaluación para ver el reporte</p></div>
+    </div>
+
+    <!-- USUARIOS -->
+    <div class="page" id="page-usuarios">
+      <div class="pg-hdr"><div><div class="pg-title">Usuarios</div><div class="pg-sub">Gestión de accesos y roles</div></div></div>
+      <div class="card"><div id="users-list"><p style="color:var(--text3);font-size:14px">Cargando...</p></div></div>
+    </div>
+
+  </main>
+</div>
+</div>
+
+<!-- MODAL: Nueva evaluación -->
+<div class="mo" id="mo-eval">
+  <div class="md">
+    <div class="md-hdr"><div class="md-title">Nueva evaluación</div><button class="btn btn-g btn-sm" onclick="closeMo('mo-eval')">✕</button></div>
+    <div class="steps">
+      <div class="step active" id="step-1"><div class="sn">1</div><div class="step-lbl">Info básica</div></div>
+      <div class="step" id="step-2"><div class="sn">2</div><div class="step-lbl">Competencias</div></div>
+      <div class="step" id="step-3"><div class="sn">3</div><div class="step-lbl">Evaluadores</div></div>
+    </div>
+    <div id="ws-1">
+      <div class="fg">
+        <div class="fi full"><label>Nombre de la evaluación</label><input id="ev-nombre" placeholder="Ej: Evaluación Q1 2025 — Gerencia Comercial"/></div>
+        <div class="fi"><label>Tipo</label>
+          <select id="ev-tipo"><option value="360">360° — Multifuente completo</option><option value="180">180° — Jefe + Auto</option><option value="90">90° — Jefe directo</option></select>
+        </div>
+        <div class="fi"><label>Empleado evaluado</label><select id="ev-emp"><option value="">Selecciona...</option></select></div>
+        <div class="fi"><label>Fecha inicio</label><input type="date" id="ev-start"/></div>
+        <div class="fi"><label>Fecha cierre</label><input type="date" id="ev-end"/></div>
+      </div>
+    </div>
+    <div id="ws-2" style="display:none">
+      <div class="sl">Competencias a evaluar</div>
+      <div id="comp-list"></div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <input id="new-comp" placeholder="Añadir competencia..." style="flex:1" onkeydown="if(event.key==='Enter')addComp()"/>
+        <button class="btn btn-g btn-sm" onclick="addComp()">+ Añadir</button>
+      </div>
+      <div style="margin-top:14px">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Sugerencias:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px" id="comp-sugg"></div>
+      </div>
+    </div>
+    <div id="ws-3" style="display:none">
+      <div class="sl">Evaluadores asignados</div>
+      <div id="ev-list"></div>
+      <div id="tipo-info" style="margin-top:16px;padding:12px 14px;background:var(--bg3);border-radius:var(--radius);font-size:13px;color:var(--text2)"></div>
+    </div>
+    <div class="md-ft">
+      <button class="btn btn-g" id="btn-prev" onclick="prevStep()" style="display:none">← Anterior</button>
+      <button class="btn btn-p" id="btn-next" onclick="nextStep()">Siguiente →</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Nuevo empleado -->
+<div class="mo" id="mo-emp">
+  <div class="md">
+    <div class="md-hdr"><div class="md-title">Agregar empleado</div><button class="btn btn-g btn-sm" onclick="closeMo('mo-emp')">✕</button></div>
+    <div class="fg">
+      <div class="fi"><label>Nombre completo</label><input id="emp-n" placeholder="Ana García"/></div>
+      <div class="fi"><label>Email corporativo</label><input id="emp-e" type="email" placeholder="ana@empresa.com"/></div>
+      <div class="fi"><label>Cargo</label><input id="emp-c" placeholder="Gerente de Marketing"/></div>
+      <div class="fi"><label>Área</label><input id="emp-a" placeholder="Mercadeo"/></div>
+      <div class="fi"><label>Jefe directo</label><select id="emp-j"><option value="">Sin jefe</option></select></div>
+      <div class="fi"><label>Nivel</label>
+        <select id="emp-l">
+          <option value="operativo">Operativo</option><option value="analista">Analista / Profesional</option>
+          <option value="coordinador">Coordinador</option><option value="gerente">Gerente</option>
+          <option value="director">Director</option><option value="vp">VP / C-Level</option>
+        </select>
+      </div>
+    </div>
+    <div class="md-ft"><button class="btn btn-g" onclick="closeMo('mo-emp')">Cancelar</button><button class="btn btn-p" onclick="saveEmp()">Guardar empleado</button></div>
+  </div>
+</div>
+
+<!-- MODAL: Cambiar rol -->
+<div class="mo" id="mo-role">
+  <div class="md" style="max-width:380px">
+    <div class="md-hdr"><div class="md-title">Cambiar rol</div><button class="btn btn-g btn-sm" onclick="closeMo('mo-role')">✕</button></div>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:16px" id="role-uname">—</p>
+    <div class="fi"><label>Nuevo rol</label>
+      <select id="role-sel">
+        <option value="evaluador">Evaluador</option><option value="evaluado">Evaluado</option>
+        <option value="rrhh">RRHH</option><option value="admin">Admin</option>
+      </select>
+    </div>
+    <input type="hidden" id="role-uid"/>
+    <div class="md-ft"><button class="btn btn-g" onclick="closeMo('mo-role')">Cancelar</button><button class="btn btn-p" onclick="saveRole()">Guardar rol</button></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
