@@ -7,6 +7,67 @@
 // ── STATE ──────────────────────────────────────────
 let db = null, auth = null, demoMode = false, currentUser = null;
 
+// ── TEXTOS DEL SISTEMA ─────────────────────────────
+const TEXT_DEFAULTS = {
+  appName:         "EvalPro",
+  appTagline:      "Sistema de evaluaciones 360° · 180° · 90°",
+  loginTitle:      "Iniciar sesión",
+  loginSubtitle:   "Acceso restringido — contacta al administrador para obtener credenciales",
+  loginFeature1:   "Evaluaciones multifuente completas",
+  loginFeature2:   "Control de acceso por roles",
+  loginFeature3:   "Reportes con gráficas radar",
+  loginFeature4:   "Sincronización con Firebase en tiempo real",
+  loginFeature5:   "Login con email o Google",
+  navDashboard:    "Dashboard",
+  navEvaluaciones: "Evaluaciones",
+  navEmpleados:    "Empleados",
+  navFormulario:   "Formulario",
+  navReportes:     "Reportes",
+  navUsuarios:     "Usuarios",
+  compSugg:        "Liderazgo,Comunicación efectiva,Orientación a resultados,Trabajo en equipo,Innovación,Gestión del tiempo,Adaptabilidad,Resolución de problemas,Pensamiento estratégico,Orientación al cliente",
+};
+let TEXTS = { ...TEXT_DEFAULTS };
+
+async function loadTexts() {
+  if (demoMode) return;
+  try {
+    const doc = await db.collection("config").doc("texts").get();
+    if (doc.exists) TEXTS = { ...TEXT_DEFAULTS, ...doc.data() };
+  } catch(e) {}
+  applyTexts();
+}
+
+function applyTexts() {
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  document.querySelectorAll(".logo-mark").forEach(el => el.textContent = TEXTS.appName);
+  document.querySelectorAll(".auth-logo").forEach(el => el.textContent = TEXTS.appName);
+  document.querySelectorAll(".auth-tagline").forEach(el => el.textContent = TEXTS.appTagline);
+  set("auth-login-title",    TEXTS.loginTitle);
+  set("auth-login-subtitle", TEXTS.loginSubtitle);
+  ["loginFeature1","loginFeature2","loginFeature3","loginFeature4","loginFeature5"].forEach((k,i) => {
+    const el = document.getElementById("feat-" + (i+1)); if (el) el.textContent = TEXTS[k];
+  });
+  set("nav-label-dashboard",    TEXTS.navDashboard);
+  set("nav-label-evaluaciones", TEXTS.navEvaluaciones);
+  set("nav-label-empleados",    TEXTS.navEmpleados);
+  set("nav-label-formulario",   TEXTS.navFormulario);
+  set("nav-label-reportes",     TEXTS.navReportes);
+  set("nav-label-usuarios",     TEXTS.navUsuarios);
+}
+
+async function saveTexts(updated) {
+  TEXTS = { ...TEXTS, ...updated };
+  if (!demoMode) await db.collection("config").doc("texts").set(TEXTS, { merge: true });
+  applyTexts();
+  toast("Textos guardados ✓");
+}
+
+// ── FIREBASE CONFIG PERSISTENCE ────────────────────
+const FB_KEY = "evalpro_firebase_cfg";
+function saveCfg(cfg) { try { localStorage.setItem(FB_KEY, JSON.stringify(cfg)); } catch(e) {} }
+function loadCfg()    { try { return JSON.parse(localStorage.getItem(FB_KEY) || "null"); } catch(e) { return null; } }
+function clearCfg()   { try { localStorage.removeItem(FB_KEY); } catch(e) {} }
+
 const DEMO = {
   users: [
     { uid: "u1", name: "María Rodríguez", email: "admin@empresa.com", role: "admin" },
@@ -62,12 +123,29 @@ function initFirebase() {
     if (!firebase.apps.length) firebase.initializeApp(cfg);
     db   = firebase.firestore();
     auth = firebase.auth();
+    saveCfg(cfg); // persist so config screen doesn't show again
     auth.onAuthStateChanged(handleAuth);
     document.getElementById("cfg-step").style.display   = "none";
     document.getElementById("login-step").style.display = "block";
     document.getElementById("auth-proj").textContent    = "Proyecto: " + cfg.projectId;
   } catch(e) { showCfgErr("Error: " + e.message); }
 }
+
+// Auto-init if config already saved in localStorage
+(function autoInit() {
+  const saved = loadCfg();
+  if (!saved) return;
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(saved);
+    db   = firebase.firestore();
+    auth = firebase.auth();
+    auth.onAuthStateChanged(handleAuth);
+    document.getElementById("cfg-step").style.display   = "none";
+    document.getElementById("login-step").style.display = "block";
+    const el = document.getElementById("auth-proj");
+    if (el) el.textContent = "Proyecto: " + saved.projectId;
+  } catch(e) { clearCfg(); }
+})();
 
 function useDemoMode() {
   demoMode = true;
@@ -116,6 +194,12 @@ function doLogout() {
   auth.signOut().then(() => location.reload());
 }
 
+function forgetConfig() {
+  if (!confirm("¿Olvidar la configuración de Firebase? Se pedirá nuevamente al recargar.")) return;
+  clearCfg();
+  location.reload();
+}
+
 function fErr(e) {
   const m = {
     "auth/user-not-found":      "Usuario no encontrado",
@@ -134,6 +218,7 @@ function enterApp() {
   document.getElementById("auth-screen").style.display = "none";
   document.getElementById("app-screen").style.display  = "block";
   applyRole();
+  loadTexts(); // load editable texts from Firebase
   bootstrap();
 }
 
@@ -213,6 +298,33 @@ function genId(col) {
 async function bootstrap() {
   await Promise.all([loadDash(), loadEvalTable(), loadEmpTable(), loadSelects()]);
   if ((PERMS[currentUser.role] || {}).usuarios) await loadUsers();
+}
+
+// ── TEXTOS EDITABLES (admin) ────────────────────────
+function openTextos() {
+  // Populate fields with current values
+  Object.keys(TEXT_DEFAULTS).forEach(k => {
+    const el = document.getElementById("tx-" + k);
+    if (el) el.value = TEXTS[k] || TEXT_DEFAULTS[k];
+  });
+  openMo("mo-textos");
+}
+
+async function saveTextosForm() {
+  const updated = {};
+  Object.keys(TEXT_DEFAULTS).forEach(k => {
+    const el = document.getElementById("tx-" + k);
+    if (el) updated[k] = el.value.trim() || TEXT_DEFAULTS[k];
+  });
+  await saveTexts(updated);
+  closeMo("mo-textos");
+}
+
+function resetTextos() {
+  Object.keys(TEXT_DEFAULTS).forEach(k => {
+    const el = document.getElementById("tx-" + k);
+    if (el) el.value = TEXT_DEFAULTS[k];
+  });
 }
 
 // ── DASHBOARD ───────────────────────────────────────

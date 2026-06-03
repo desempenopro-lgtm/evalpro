@@ -26,11 +26,11 @@
       <div class="auth-tagline">Sistema de evaluaciones 360° · 180° · 90°</div>
     </div>
     <div class="auth-features">
-      <div class="auth-feat"><div class="auth-feat-dot"></div>Evaluaciones multifuente completas</div>
-      <div class="auth-feat"><div class="auth-feat-dot"></div>Control de acceso por roles</div>
-      <div class="auth-feat"><div class="auth-feat-dot"></div>Reportes con gráficas radar</div>
-      <div class="auth-feat"><div class="auth-feat-dot"></div>Sincronización con Firebase en tiempo real</div>
-      <div class="auth-feat"><div class="auth-feat-dot"></div>Login con email o Google</div>
+      <div class="auth-feat"><div class="auth-feat-dot"></div><span id="feat-1">Evaluaciones multifuente completas</span></div>
+      <div class="auth-feat"><div class="auth-feat-dot"></div><span id="feat-2">Control de acceso por roles</span></div>
+      <div class="auth-feat"><div class="auth-feat-dot"></div><span id="feat-3">Reportes con gráficas radar</span></div>
+      <div class="auth-feat"><div class="auth-feat-dot"></div><span id="feat-4">Sincronización con Firebase en tiempo real</span></div>
+      <div class="auth-feat"><div class="auth-feat-dot"></div><span id="feat-5">Login con email o Google</span></div>
     </div>
   </div>
 
@@ -56,8 +56,9 @@
 
     <!-- Paso 2: Solo Login -->
     <div id="login-step" style="display:none">
-      <div class="auth-title">Iniciar sesión</div>
-      <div class="auth-sub" id="auth-proj">Acceso restringido — contacta al administrador para obtener credenciales</div>
+      <div class="auth-title" id="auth-login-title">Iniciar sesión</div>
+      <div class="auth-sub" id="auth-login-subtitle">Acceso restringido — contacta al administrador para obtener credenciales</div>
+      <div id="auth-proj" style="display:none"></div>
       <div class="auth-err" id="auth-err"></div>
       <div class="inp-wrap"><label>Email</label><input id="l-email" type="email" placeholder="usuario@empresa.com" onkeydown="if(event.key===\'Enter\')doLogin()"/></div>
       <div class="inp-wrap"><label>Contraseña</label><input id="l-pass" type="password" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')doLogin()"/></div>
@@ -81,24 +82,24 @@
     <div class="nav">
       <div class="nav-sec">Principal</div>
       <button class="nav-item active" id="ni-dashboard" onclick="showPage('dashboard')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Dashboard
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span id="nav-label-dashboard">Dashboard</span>
       </button>
       <button class="nav-item hid" id="ni-evaluaciones" onclick="showPage('evaluaciones')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>Evaluaciones
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg><span id="nav-label-evaluaciones">Evaluaciones</span>
       </button>
       <button class="nav-item hid" id="ni-empleados" onclick="showPage('empleados')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Empleados
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg><span id="nav-label-empleados">Empleados</span>
       </button>
       <div class="nav-sec">Proceso</div>
       <button class="nav-item hid" id="ni-formulario" onclick="showPage('formulario')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Formulario
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg><span id="nav-label-formulario">Formulario</span>
       </button>
       <button class="nav-item hid" id="ni-reportes" onclick="showPage('reportes')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>Reportes
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 20V10M12 20V4M6 20v-6"/></svg><span id="nav-label-reportes">Reportes</span>
       </button>
       <div class="nav-sec hid" id="ni-sec-admin">Administración</div>
       <button class="nav-item hid" id="ni-usuarios" onclick="showPage('usuarios')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 15c-3.31 0-6 1.34-6 3v1h12v-1c0-1.66-2.69-3-6-3z"/><circle cx="12" cy="8" r="4"/><path d="M20 15v1M20 8a4 4 0 010 8"/></svg>Usuarios
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 15c-3.31 0-6 1.34-6 3v1h12v-1c0-1.66-2.69-3-6-3z"/><circle cx="12" cy="8" r="4"/><path d="M20 15v1M20 8a4 4 0 010 8"/></svg><span id="nav-label-usuarios">Usuarios</span>
       </button>
     </div>
     <div class="user-bar">
@@ -225,11 +226,21 @@
     <div class="page" id="page-usuarios">
       <div class="pg-hdr">
         <div><div class="pg-title">Usuarios</div><div class="pg-sub">Gestión de accesos y roles</div></div>
-        <button class="btn btn-p" onclick="openCreateUser()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Crear usuario
-        </button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-g" onclick="openTextos()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar textos
+          </button>
+          <button class="btn btn-p" onclick="openCreateUser()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Crear usuario
+          </button>
+        </div>
       </div>
       <div class="card"><div id="users-list"><p style="color:var(--text3);font-size:14px">Cargando...</p></div></div>
+      <div style="margin-top:16px;text-align:right">
+        <button onclick="forgetConfig()" style="background:none;border:none;font-size:12px;color:var(--text3);cursor:pointer;font-family:var(--font);text-decoration:underline">
+          Olvidar configuración de Firebase
+        </button>
+      </div>
     </div>
 
   </main>
@@ -405,6 +416,64 @@
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+
+<!-- MODAL: Editar textos (solo Admin) -->
+<div class="mo" id="mo-textos">
+  <div class="md" style="max-width:620px">
+    <div class="md-hdr">
+      <div class="md-title">Editar textos del sistema</div>
+      <button class="btn btn-g btn-sm" onclick="closeMo('mo-textos')">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:20px">Los cambios se guardan en Firebase y aplican a todos los usuarios inmediatamente.</p>
+
+    <div style="display:flex;flex-direction:column;gap:0;max-height:60vh;overflow-y:auto;padding-right:4px">
+
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);padding:4px 0 8px">Identidad de la app</div>
+      <div class="fg" style="margin-bottom:14px">
+        <div class="fi"><label>Nombre de la app</label><input id="tx-appName" placeholder="EvalPro"/></div>
+        <div class="fi"><label>Tagline / slogan</label><input id="tx-appTagline" placeholder="Sistema de evaluaciones..."/></div>
+      </div>
+
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);padding:4px 0 8px;border-top:1px solid var(--border);margin-top:4px">Pantalla de login</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+        <div class="fi"><label>Título</label><input id="tx-loginTitle" placeholder="Iniciar sesión"/></div>
+        <div class="fi"><label>Subtítulo / mensaje de acceso</label><input id="tx-loginSubtitle" placeholder="Acceso restringido..."/></div>
+        <div class="fi"><label>Característica 1</label><input id="tx-loginFeature1"/></div>
+        <div class="fi"><label>Característica 2</label><input id="tx-loginFeature2"/></div>
+        <div class="fi"><label>Característica 3</label><input id="tx-loginFeature3"/></div>
+        <div class="fi"><label>Característica 4</label><input id="tx-loginFeature4"/></div>
+        <div class="fi"><label>Característica 5</label><input id="tx-loginFeature5"/></div>
+      </div>
+
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);padding:4px 0 8px;border-top:1px solid var(--border);margin-top:4px">Menú lateral</div>
+      <div class="fg" style="margin-bottom:14px">
+        <div class="fi"><label>Dashboard</label><input id="tx-navDashboard"/></div>
+        <div class="fi"><label>Evaluaciones</label><input id="tx-navEvaluaciones"/></div>
+        <div class="fi"><label>Empleados</label><input id="tx-navEmpleados"/></div>
+        <div class="fi"><label>Formulario</label><input id="tx-navFormulario"/></div>
+        <div class="fi"><label>Reportes</label><input id="tx-navReportes"/></div>
+        <div class="fi"><label>Usuarios</label><input id="tx-navUsuarios"/></div>
+      </div>
+
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);padding:4px 0 8px;border-top:1px solid var(--border);margin-top:4px">Competencias sugeridas por defecto</div>
+      <div class="fi" style="margin-bottom:4px">
+        <label>Separadas por coma</label>
+        <textarea id="tx-compSugg" style="min-height:70px;font-size:13px" placeholder="Liderazgo,Comunicación,..."></textarea>
+      </div>
+    </div>
+
+    <div class="md-ft" style="justify-content:space-between">
+      <button class="btn btn-g btn-sm" onclick="resetTextos()">Restaurar valores por defecto</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" onclick="closeMo('mo-textos')">Cancelar</button>
+        <button class="btn btn-p" onclick="saveTextosForm()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Guardar textos
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="app.js"></script>
 </body>
