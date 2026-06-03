@@ -97,24 +97,17 @@ async function doLogin() {
   catch(e) { showAErr(fErr(e)); setLd("btn-li", false); }
 }
 
-async function doRegister() {
-  const name = gv("r-name"), email = gv("r-email"), pass = gv("r-pass"), role = gv("r-role");
-  if (!name || !email || !pass) { showAErr("Completa todos los campos"); return; }
-  if (pass.length < 6) { showAErr("La contraseña debe tener mínimo 6 caracteres"); return; }
-  setLd("btn-reg", true);
-  try {
-    const cr = await auth.createUserWithEmailAndPassword(email, pass);
-    await db.collection("users").doc(cr.user.uid).set({ name, email, role, createdAt: new Date().toISOString() });
-    hideAErr();
-  } catch(e) { showAErr(fErr(e)); setLd("btn-reg", false); }
-}
-
 async function doGoogle() {
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
     const cr       = await auth.signInWithPopup(provider);
     const doc      = await db.collection("users").doc(cr.user.uid).get();
-    if (!doc.exists) await db.collection("users").doc(cr.user.uid).set({ name: cr.user.displayName, email: cr.user.email, role: "evaluador", createdAt: new Date().toISOString() });
+    // Google login only works if the user was pre-created by admin
+    if (!doc.exists) {
+      await auth.signOut();
+      showAErr("Tu cuenta no está registrada. Contacta al administrador.");
+      return;
+    }
   } catch(e) { showAErr(fErr(e)); }
 }
 
@@ -161,7 +154,7 @@ function applyRole() {
   });
   document.getElementById("ni-sec-admin").classList.toggle("hid", !p.usuarios);
 
-  ["btn-new-eval","btn-ev-new","btn-emp-new"].forEach(id => {
+  ["btn-new-eval","btn-ev-new","btn-emp-new","btn-emp-import"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle("hid", !p.canCreate);
   });
@@ -190,12 +183,6 @@ function toast(msg, t = "ok") {
 function showAErr(m)   { const e = document.getElementById("auth-err"); e.textContent = m; e.style.display = "block"; }
 function hideAErr()    { document.getElementById("auth-err").style.display = "none"; }
 function showCfgErr(m) { const e = document.getElementById("cfg-err");  e.textContent = m; e.style.display = "block"; }
-function swTab(t) {
-  document.querySelectorAll(".auth-tab").forEach((x, i) => x.classList.toggle("active", i === (t === "login" ? 0 : 1)));
-  document.getElementById("tab-login").style.display = t === "login" ? "block" : "none";
-  document.getElementById("tab-reg").style.display   = t === "register" ? "block" : "none";
-  hideAErr();
-}
 function setLd(id, on) { const b = document.getElementById(id); if (b) b.disabled = on; }
 
 // ── DB ABSTRACTION ──────────────────────────────────
@@ -351,6 +338,225 @@ async function saveEmp() {
   toast("Empleado guardado"); closeMo("mo-emp");
   await loadEmpTable(); await loadSelects();
   ["emp-n","emp-e","emp-c","emp-a"].forEach(id => document.getElementById(id).value = "");
+}
+
+// ── IMPORTACIÓN MASIVA ──────────────────────────────
+// Columnas aceptadas (case-insensitive, con variantes en español e inglés)
+const COL_MAP = {
+  nombre:   ["nombre","name","nombre completo","full name","empleado"],
+  email:    ["email","correo","mail","correo electrónico","e-mail"],
+  cargo:    ["cargo","puesto","posición","position","job title","título"],
+  area:     ["área","area","departamento","department","depto"],
+  nivel:    ["nivel","level","jerarquía","hierarchy","rango"],
+  jefeNombre:["jefe","jefe directo","manager","supervisor","reporta a","reports to"],
+};
+
+let importPreview = []; // rows parsed, pending confirmation
+
+function openImport() { openMo("mo-import"); resetImport(); }
+
+function resetImport() {
+  document.getElementById("import-input").value = "";
+  document.getElementById("import-preview").style.display = "none";
+  document.getElementById("import-dropzone").style.display = "flex";
+  document.getElementById("import-error").style.display   = "none";
+  document.getElementById("btn-confirm-import").style.display = "none";
+  importPreview = [];
+}
+
+function handleImportDrop(e) {
+  e.preventDefault();
+  document.getElementById("import-dropzone").classList.remove("dz-over");
+  const file = e.dataTransfer?.files[0] || e.target.files[0];
+  if (file) processImportFile(file);
+}
+
+function processImportFile(file) {
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (!["csv","xlsx","xls"].includes(ext)) {
+    showImportErr("Formato no soportado. Usa .xlsx, .xls o .csv"); return;
+  }
+  const reader = new FileReader();
+  if (ext === "csv") {
+    reader.onload = e => parseCSV(e.target.result);
+    reader.readAsText(file, "UTF-8");
+  } else {
+    reader.onload = e => parseXLSX(e.target.result);
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+function parseCSV(text) {
+  // Detect delimiter: comma or semicolon
+  const delim = (text.split(";").length > text.split(",").length) ? ";" : ",";
+  const lines  = text.trim().split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) { showImportErr("El archivo está vacío o solo tiene encabezados"); return; }
+  const headers = lines[0].split(delim).map(h => h.trim().replace(/^"|"$/g,"").toLowerCase());
+  const rows    = lines.slice(1).map(line => {
+    const cols = line.split(delim).map(c => c.trim().replace(/^"|"$/g,""));
+    const obj  = {};
+    headers.forEach((h, i) => obj[h] = cols[i] || "");
+    return obj;
+  });
+  buildPreview(headers, rows);
+}
+
+function parseXLSX(buffer) {
+  if (typeof XLSX === "undefined") {
+    showImportErr("Librería XLSX no cargada. Usa CSV o recarga la página."); return;
+  }
+  const wb   = XLSX.read(buffer, { type:"array" });
+  const ws   = wb.Sheets[wb.SheetNames[0]];
+  const data = XLSX.utils.sheet_to_json(ws, { defval:"" });
+  if (!data.length) { showImportErr("La hoja está vacía"); return; }
+  const headers = Object.keys(data[0]).map(h => h.toLowerCase().trim());
+  const rows    = data.map(r => {
+    const obj = {};
+    Object.entries(r).forEach(([k,v]) => obj[k.toLowerCase().trim()] = String(v||"").trim());
+    return obj;
+  });
+  buildPreview(headers, rows);
+}
+
+function resolveCol(headers, fieldKey) {
+  // Returns the raw header name that matches this field
+  const aliases = COL_MAP[fieldKey] || [];
+  return headers.find(h => aliases.includes(h.toLowerCase())) || null;
+}
+
+function buildPreview(headers, rows) {
+  // Map columns
+  const colKeys  = Object.keys(COL_MAP);
+  const resolved = {};
+  colKeys.forEach(k => { resolved[k] = resolveCol(headers, k); });
+
+  if (!resolved.nombre) { showImportErr(`No encontré la columna "Nombre". Encabezados detectados: ${headers.join(", ")}`); return; }
+
+  // Parse rows → empleado objects
+  importPreview = rows
+    .filter(r => (r[resolved.nombre]||"").trim())
+    .map((r, i) => ({
+      _row:       i + 2,
+      nombre:     (r[resolved.nombre]      ||"").trim(),
+      email:      (r[resolved.email]       ||"").trim().toLowerCase(),
+      cargo:      (r[resolved.cargo]       ||"").trim(),
+      area:       (r[resolved.area]        ||"").trim(),
+      nivel:      normalizeNivel((r[resolved.nivel]||"").trim()),
+      jefeNombre: (r[resolved.jefeNombre]  ||"").trim(),
+    }));
+
+  if (!importPreview.length) { showImportErr("No se encontraron filas con datos válidos"); return; }
+
+  renderImportPreview(resolved);
+}
+
+function normalizeNivel(v) {
+  const vl = v.toLowerCase();
+  if (vl.includes("vp") || vl.includes("c-level") || vl.includes("clevel") || vl.includes("director")) return "director";
+  if (vl.includes("gerente") || vl.includes("manager"))  return "gerente";
+  if (vl.includes("coord") || vl.includes("supervis"))   return "coordinador";
+  if (vl.includes("analista") || vl.includes("profesional") || vl.includes("senior") || vl.includes("junior")) return "analista";
+  if (vl.includes("operativo") || vl.includes("auxiliar") || vl.includes("asistente")) return "operativo";
+  return v || "analista";
+}
+
+function renderImportPreview(resolved) {
+  document.getElementById("import-dropzone").style.display = "none";
+  document.getElementById("import-error").style.display   = "none";
+
+  const colStatus = Object.entries(COL_MAP).map(([k, aliases]) => {
+    const found = resolved[k];
+    const icon  = found ? "✓" : (k === "nombre" ? "✗" : "—");
+    const color = found ? "var(--green)" : (k === "nombre" ? "var(--red)" : "var(--text3)");
+    return `<span style="font-size:12px;padding:2px 8px;border-radius:10px;background:var(--bg3);color:${color}">${icon} ${k}</span>`;
+  }).join("");
+
+  const previewRows = importPreview.slice(0, 8).map(e => `
+    <tr>
+      <td style="padding:8px 10px;font-size:13px;font-weight:500;color:var(--text)">${e.nombre}</td>
+      <td style="padding:8px 10px;font-size:12px;color:var(--text3);font-family:var(--mono)">${e.email||"—"}</td>
+      <td style="padding:8px 10px;font-size:13px">${e.cargo||"—"}</td>
+      <td style="padding:8px 10px;font-size:13px">${e.area||"—"}</td>
+      <td style="padding:8px 10px;font-size:12px;color:var(--text3)">${e.nivel||"—"}</td>
+      <td style="padding:8px 10px;font-size:12px;color:var(--text3)">${e.jefeNombre||"—"}</td>
+    </tr>`).join("");
+
+  const more = importPreview.length > 8
+    ? `<tr><td colspan="6" style="padding:8px 10px;font-size:12px;color:var(--text3);text-align:center">... y ${importPreview.length - 8} empleados más</td></tr>`
+    : "";
+
+  document.getElementById("import-preview").innerHTML = `
+    <div style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:500;margin-bottom:8px">Columnas detectadas:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${colStatus}</div>
+    </div>
+    <div style="font-size:13px;font-weight:500;margin-bottom:8px">
+      Vista previa — <span style="color:var(--accent)">${importPreview.length} empleados</span> a importar
+    </div>
+    <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--border)">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:var(--bg3)">
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);text-align:left">Nombre</th>
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);text-align:left">Email</th>
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);text-align:left">Cargo</th>
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);text-align:left">Área</th>
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);text-align:left">Nivel</th>
+            <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);text-align:left">Jefe</th>
+          </tr>
+        </thead>
+        <tbody>${previewRows}${more}</tbody>
+      </table>
+    </div>`;
+  document.getElementById("import-preview").style.display       = "block";
+  document.getElementById("btn-confirm-import").style.display   = "inline-flex";
+}
+
+async function confirmImport() {
+  if (!importPreview.length) return;
+  const btn = document.getElementById("btn-confirm-import");
+  btn.disabled = true;
+  btn.textContent = "Importando...";
+
+  try {
+    // First pass: save all without jefeId so we can resolve names → IDs
+    const saved = [];
+    for (const emp of importPreview) {
+      const id = genId("empleados");
+      await dbSet("empleados", id, { nombre:emp.nombre, email:emp.email, cargo:emp.cargo, area:emp.area, nivel:emp.nivel, jefeId:"" });
+      saved.push({ ...emp, id });
+    }
+    // Second pass: resolve jefe names → IDs and update
+    for (const emp of saved) {
+      if (!emp.jefeNombre) continue;
+      const jefe = saved.find(x => x.nombre.toLowerCase() === emp.jefeNombre.toLowerCase())
+                || (await dbAll("empleados")).find(x => x.nombre.toLowerCase() === emp.jefeNombre.toLowerCase());
+      if (jefe) await dbSet("empleados", emp.id, { jefeId: jefe.id || jefe.uid });
+    }
+
+    toast(`${importPreview.length} empleados importados ✓`);
+    closeMo("mo-import");
+    await loadEmpTable();
+    await loadSelects();
+  } catch(e) {
+    showImportErr("Error al guardar: " + e.message);
+    btn.disabled = false;
+    btn.textContent = "Confirmar importación";
+  }
+}
+
+function showImportErr(msg) {
+  const el = document.getElementById("import-error");
+  el.textContent = msg; el.style.display = "block";
+}
+
+function downloadTemplate() {
+  const csv = "Nombre,Email,Cargo,Área,Nivel,Jefe directo\nAna García,ana@empresa.com,Gerente de Marketing,Mercadeo,gerente,Carlos López\nCarlos López,carlos@empresa.com,Director Comercial,Ventas,director,\nLaura Rincón,laura@empresa.com,Analista de Datos,BI,analista,Ana García\n";
+  const blob = new Blob(["\uFEFF" + csv], { type:"text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = "plantilla_empleados.csv"; a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ── SELECTORS ───────────────────────────────────────
@@ -561,23 +767,91 @@ async function loadReportById(evalId) {
 }
 
 // ── USUARIOS ────────────────────────────────────────
+function openCreateUser() {
+  ["cu-name","cu-email","cu-pass"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("cu-role").value  = "evaluador";
+  document.getElementById("cu-err").style.display = "none";
+  openMo("mo-create-user");
+}
+
+function togglePassVis() {
+  const inp  = document.getElementById("cu-pass");
+  const icon = document.getElementById("eye-icon");
+  if (inp.type === "password") {
+    inp.type = "text";
+    icon.innerHTML = `<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>`;
+  } else {
+    inp.type = "password";
+    icon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+  }
+}
+
+async function adminCreateUser() {
+  if (currentUser.role !== "admin") { toast("Solo el Admin puede crear usuarios", "err"); return; }
+  const name  = gv("cu-name");
+  const email = gv("cu-email");
+  const pass  = gv("cu-pass");
+  const role  = gv("cu-role");
+  const cuErr = document.getElementById("cu-err");
+
+  if (!name || !email || !pass) { cuErr.textContent = "Completa todos los campos"; cuErr.style.display = "block"; return; }
+  if (pass.length < 6)          { cuErr.textContent = "La contraseña debe tener mínimo 6 caracteres"; cuErr.style.display = "block"; return; }
+
+  setLd("btn-cu", true);
+  cuErr.style.display = "none";
+
+  if (demoMode) {
+    const uid = "u" + (DEMO.users.length + 1);
+    DEMO.users.push({ uid, name, email, role });
+    toast(`Usuario "${name}" creado como ${ROLE_LABELS[role]}`);
+    closeMo("mo-create-user");
+    await loadUsers();
+    setLd("btn-cu", false);
+    return;
+  }
+
+  try {
+    // Create user in Firebase Auth using a secondary app instance so admin stays logged in
+    const secondaryApp = firebase.initializeApp(firebase.app().options, "secondary_" + Date.now());
+    const secondaryAuth = secondaryApp.auth();
+    const cr = await secondaryAuth.createUserWithEmailAndPassword(email, pass);
+    await db.collection("users").doc(cr.user.uid).set({ name, email, role, createdAt: new Date().toISOString(), createdBy: currentUser.uid });
+    await secondaryAuth.signOut();
+    await secondaryApp.delete();
+    toast(`Usuario "${name}" creado como ${ROLE_LABELS[role]}`);
+    closeMo("mo-create-user");
+    await loadUsers();
+  } catch(e) {
+    cuErr.textContent = fErr(e);
+    cuErr.style.display = "block";
+  }
+  setLd("btn-cu", false);
+}
+
 async function loadUsers() {
   let users = [];
   if (demoMode) { users = DEMO.users; }
   else { const snap = await db.collection("users").get(); users = snap.docs.map(d => ({ uid:d.id, ...d.data() })); }
 
   const ul = document.getElementById("users-list");
-  if (!users.length) { ul.innerHTML = `<p style="color:var(--text3);font-size:14px">Sin usuarios.</p>`; return; }
+  if (!users.length) { ul.innerHTML = `<p style="color:var(--text3);font-size:14px">Sin usuarios. Crea el primero.</p>`; return; }
   ul.innerHTML = users.map(u => {
     const ini  = (u.name||u.email||"?").split(" ").slice(0,2).map(w => w[0]).join("").toUpperCase();
     const role = u.role || "evaluador";
+    const isMe = currentUser.uid === u.uid;
     return `<div class="uc">
       <div class="avatar">${ini}</div>
-      <div class="uc-i"><div class="uc-n">${u.name||"Sin nombre"}</div><div class="uc-e">${u.email||"—"}</div></div>
+      <div class="uc-i">
+        <div class="uc-n">${u.name||"Sin nombre"}</div>
+        <div class="uc-e">${u.email||"—"}</div>
+      </div>
       <span class="rp ${ROLE_CLASSES[role]}">${ROLE_LABELS[role]}</span>
-      ${currentUser.uid !== u.uid
-        ? `<button class="btn btn-g btn-sm" onclick="openEditRole(\'${u.uid}\',\'${(u.name||"").replace(/'/g,"\\'")}\',\'${role}\')">Cambiar rol</button>`
-        : `<span style="font-size:12px;color:var(--text3);padding:6px 8px">Tú</span>`}
+      ${isMe
+        ? `<span style="font-size:12px;color:var(--text3);padding:6px 8px">Tú</span>`
+        : `<div style="display:flex;gap:6px">
+             <button class="btn btn-g btn-sm" onclick="openEditRole(\'${u.uid}\',\'${(u.name||"").replace(/'/g,"\\'")}\',\'${role}\')">Cambiar rol</button>
+             <button class="btn btn-del btn-sm" onclick="deleteUser(\'${u.uid}\',\'${(u.name||"").replace(/'/g,"\\'")}\')">Eliminar</button>
+           </div>`}
     </div>`;
   }).join("");
 }
@@ -595,6 +869,18 @@ async function saveRole() {
   if (demoMode) { const u = DEMO.users.find(x => x.uid === uid); if (u) u.role = role; }
   else { await db.collection("users").doc(uid).set({ role }, { merge: true }); }
   toast("Rol actualizado"); closeMo("mo-role"); await loadUsers();
+}
+
+async function deleteUser(uid, name) {
+  if (!confirm(`¿Eliminar al usuario "${name}"? Esta acción no se puede deshacer.`)) return;
+  if (demoMode) {
+    DEMO.users = DEMO.users.filter(u => u.uid !== uid);
+  } else {
+    // Remove from Firestore (Auth deletion requires Admin SDK — mark as inactive instead)
+    await db.collection("users").doc(uid).delete();
+  }
+  toast(`Usuario "${name}" eliminado`);
+  await loadUsers();
 }
 
 // ── INIT ────────────────────────────────────────────
