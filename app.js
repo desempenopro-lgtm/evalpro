@@ -62,11 +62,18 @@ async function saveTexts(updated) {
   toast("Textos guardados ✓");
 }
 
-// ── FIREBASE CONFIG PERSISTENCE ────────────────────
-const FB_KEY = "evalpro_firebase_cfg";
-function saveCfg(cfg) { try { localStorage.setItem(FB_KEY, JSON.stringify(cfg)); } catch(e) {} }
-function loadCfg()    { try { return JSON.parse(localStorage.getItem(FB_KEY) || "null"); } catch(e) { return null; } }
-function clearCfg()   { try { localStorage.removeItem(FB_KEY); } catch(e) {} }
+// ── FIREBASE CONFIG (hardcoded) ─────────────────────
+const FB_CONFIG = {
+  apiKey:            "AIzaSyCcEebYnpqnq2Hm6sg8bP9rCDLB8JmoPTY",
+  authDomain:        "evaluaciones-76787.firebaseapp.com",
+  projectId:         "evaluaciones-76787",
+  storageBucket:     "evaluaciones-76787.firebasestorage.app",
+  messagingSenderId: "990605248069",
+  appId:             "1:990605248069:web:fed93888e3c5f6a3b8852c"
+};
+function saveCfg(cfg) {}
+function loadCfg()    { return FB_CONFIG; }
+function clearCfg()   {}
 
 const DEMO = {
   users: [
@@ -109,42 +116,14 @@ const COMP_SUGG = ["Liderazgo","Comunicación efectiva","Orientación a resultad
 // ── FIREBASE INIT ───────────────────────────────────
 function gv(id) { return (document.getElementById(id)||{}).value || ""; }
 
-function initFirebase() {
-  const cfg = {
-    apiKey:            gv("fb-apiKey"),
-    authDomain:        gv("fb-authDomain"),
-    projectId:         gv("fb-projectId"),
-    storageBucket:     gv("fb-storageBucket"),
-    messagingSenderId: gv("fb-msgSenderId"),
-    appId:             gv("fb-appId"),
-  };
-  if (!cfg.apiKey || !cfg.projectId) { showCfgErr("Completa API Key y Project ID"); return; }
-  try {
-    if (!firebase.apps.length) firebase.initializeApp(cfg);
-    db   = firebase.firestore();
-    auth = firebase.auth();
-    saveCfg(cfg); // persist so config screen doesn't show again
-    auth.onAuthStateChanged(handleAuth);
-    document.getElementById("cfg-step").style.display   = "none";
-    document.getElementById("login-step").style.display = "block";
-    document.getElementById("auth-proj").textContent    = "Proyecto: " + cfg.projectId;
-  } catch(e) { showCfgErr("Error: " + e.message); }
-}
-
-// Auto-init if config already saved in localStorage
+// Auto-init con config hardcodeada
 (function autoInit() {
-  const saved = loadCfg();
-  if (!saved) return;
   try {
-    if (!firebase.apps.length) firebase.initializeApp(saved);
+    if (!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
     db   = firebase.firestore();
     auth = firebase.auth();
     auth.onAuthStateChanged(handleAuth);
-    document.getElementById("cfg-step").style.display   = "none";
-    document.getElementById("login-step").style.display = "block";
-    const el = document.getElementById("auth-proj");
-    if (el) el.textContent = "Proyecto: " + saved.projectId;
-  } catch(e) { clearCfg(); }
+  } catch(e) { console.error("Error al inicializar Firebase:", e); }
 })();
 
 function useDemoMode() {
