@@ -117,14 +117,17 @@ const COMP_SUGG = ["Liderazgo","Comunicación efectiva","Orientación a resultad
 function gv(id) { return (document.getElementById(id)||{}).value || ""; }
 
 // Auto-init con config hardcodeada
-(function autoInit() {
+document.addEventListener("DOMContentLoaded", function() {
   try {
     if (!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
     db   = firebase.firestore();
     auth = firebase.auth();
     auth.onAuthStateChanged(handleAuth);
-  } catch(e) { console.error("Error al inicializar Firebase:", e); }
-})();
+  } catch(e) {
+    console.error("Error al inicializar Firebase:", e);
+    showAErr("Error al conectar con Firebase: " + e.message);
+  }
+});
 
 function useDemoMode() {
   demoMode = true;
@@ -147,6 +150,7 @@ async function handleAuth(fbUser) {
 
 // ── AUTH ACTIONS ────────────────────────────────────
 async function doLogin() {
+  if (!auth) { showAErr("Firebase no está listo, recarga la página"); return; }
   const email = gv("l-email"), pass = gv("l-pass");
   if (!email || !pass) { showAErr("Completa email y contraseña"); return; }
   setLd("btn-li", true);
