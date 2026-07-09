@@ -20,23 +20,20 @@
 
 <!-- ═══════════════ AUTH SCREEN ═══════════════ -->
 <div id="auth-screen">
-  <div class="auth-left">
-    <div class="auth-brand">
-      <div class="auth-logo">EvalPro</div>
-      <div class="auth-tagline">Sistema de evaluaciones 360° · 180° · 90°</div>
+  <div class="auth-center">
+    <!-- Logo / branding -->
+    <div class="auth-brand-center">
+      <div class="auth-logo-wrap" id="auth-logo-wrap">
+        <img id="auth-logo-img" src="" alt="" style="display:none;max-height:72px;max-width:200px;object-fit:contain"/>
+        <div class="auth-logo" id="auth-logo-text">EvalPro</div>
+      </div>
+      <div class="auth-tagline" id="auth-tagline-text">Sistema de evaluaciones 360° · 180° · 90°</div>
     </div>
-    <div class="auth-features">
-      <div class="auth-feat"><div class="auth-feat-dot"></div><span id="feat-1">Evaluaciones multifuente completas</span></div>
-      <div class="auth-feat"><div class="auth-feat-dot"></div><span id="feat-2">Control de acceso por roles</span></div>
-      <div class="auth-feat"><div class="auth-feat-dot"></div><span id="feat-3">Reportes con gráficas radar</span></div>
-      <div class="auth-feat"><div class="auth-feat-dot"></div><span id="feat-4">Sincronización con Firebase en tiempo real</span></div>
-      <div class="auth-feat"><div class="auth-feat-dot"></div><span id="feat-5">Login con email o Google</span></div>
-    </div>
-  </div>
 
-  <div class="auth-right">
+    <!-- Card contenedor -->
+    <div class="auth-card">
     <!-- Paso 1: Config Firebase -->
-    <div id="cfg-step" style="display:none">
+    <div id="cfg-step">
       <div class="auth-title">Configurar Firebase</div>
       <div class="auth-sub">Ingresa los datos de tu proyecto para continuar</div>
       <div class="inp-wrap"><label>API Key</label><input id="fb-apiKey" placeholder="AIzaSy..."/></div>
@@ -55,7 +52,7 @@
     </div>
 
     <!-- Paso 2: Solo Login -->
-    <div id="login-step">
+    <div id="login-step" style="display:none">
       <div class="auth-title" id="auth-login-title">Iniciar sesión</div>
       <div class="auth-sub" id="auth-login-subtitle">Acceso restringido — contacta al administrador para obtener credenciales</div>
       <div id="auth-proj" style="display:none"></div>
@@ -69,7 +66,8 @@
         Continuar con Google
       </button>
     </div>
-  </div>
+    </div><!-- /auth-card -->
+  </div><!-- /auth-center -->
 </div>
 
 <!-- ═══════════════ APP SCREEN ═══════════════ -->
@@ -363,38 +361,82 @@
 
 <!-- MODAL: Crear usuario (solo Admin) -->
 <div class="mo" id="mo-create-user">
-  <div class="md" style="max-width:420px">
+  <div class="md" style="max-width:440px">
     <div class="md-hdr">
-      <div class="md-title">Crear usuario</div>
-      <button class="btn btn-g btn-sm" onclick="closeMo(\'mo-create-user\')">✕</button>
+      <div class="md-title" id="cu-modal-title">Crear usuario</div>
+      <button class="btn btn-g btn-sm" onclick="closeMo('mo-create-user');resetCreateUser()">&#10005;</button>
     </div>
-    <p style="font-size:13px;color:var(--text2);margin-bottom:18px">El usuario recibirá sus credenciales y podrá iniciar sesión con email y contraseña.</p>
-    <div class="auth-err" id="cu-err"></div>
-    <div class="inp-wrap"><label>Nombre completo</label><input id="cu-name" placeholder="Ana García"/></div>
-    <div class="inp-wrap"><label>Email</label><input id="cu-email" type="email" placeholder="ana@empresa.com"/></div>
-    <div class="inp-wrap"><label>Contraseña temporal</label>
-      <div style="position:relative">
-        <input id="cu-pass" type="password" placeholder="mínimo 6 caracteres" style="width:100%;padding-right:40px"/>
-        <button onclick="togglePassVis()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text3)" title="Mostrar contraseña">
-          <svg id="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+
+    <!-- PASO 1: formulario -->
+    <div id="cu-form-step">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:18px">Completa los datos. Al crear el usuario obtendr&#225;s un link de invitaci&#243;n para compartirlo.</p>
+      <div class="auth-err" id="cu-err"></div>
+      <div class="inp-wrap"><label>Nombre completo</label><input id="cu-name" placeholder="Ana Garc&#237;a"/></div>
+      <div class="inp-wrap"><label>Email</label><input id="cu-email" type="email" placeholder="ana@empresa.com"/></div>
+      <div class="inp-wrap"><label>Contrase&#241;a temporal</label>
+        <div style="position:relative">
+          <input id="cu-pass" type="password" placeholder="m&#237;nimo 6 caracteres" style="width:100%;padding-right:40px"/>
+          <button onclick="togglePassVis()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text3)" title="Mostrar contrase&#241;a">
+            <svg id="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="inp-wrap"><label>Rol</label>
+        <select id="cu-role">
+          <option value="evaluador">Evaluador &#8212; Responde formularios asignados</option>
+          <option value="evaluado">Evaluado &#8212; Consulta sus propios reportes</option>
+          <option value="rrhh">RRHH &#8212; Gestiona evaluaciones y empleados</option>
+          <option value="admin">Admin &#8212; Acceso total al sistema</option>
+        </select>
+      </div>
+      <div class="md-ft">
+        <button class="btn btn-g" onclick="closeMo('mo-create-user');resetCreateUser()">Cancelar</button>
+        <button class="btn btn-p" id="btn-cu" onclick="adminCreateUser()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          Crear y generar link
         </button>
       </div>
     </div>
-    <div class="inp-wrap"><label>Rol</label>
-      <select id="cu-role">
-        <option value="evaluador">Evaluador — Responde formularios asignados</option>
-        <option value="evaluado">Evaluado — Consulta sus propios reportes</option>
-        <option value="rrhh">RRHH — Gestiona evaluaciones y empleados</option>
-        <option value="admin">Admin — Acceso total al sistema</option>
-      </select>
+
+    <!-- PASO 2: link generado -->
+    <div id="cu-link-step" style="display:none">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 0 20px">
+        <div style="width:52px;height:52px;border-radius:50%;background:rgba(5,150,105,.12);display:flex;align-items:center;justify-content:center">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        <div style="font-size:16px;font-weight:500;color:var(--text)" id="cu-success-name">Usuario creado</div>
+        <div style="font-size:13px;color:var(--text2)" id="cu-success-role"></div>
+      </div>
+
+      <div style="font-size:13px;font-weight:500;margin-bottom:8px">Link de invitaci&#243;n</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Comp&#225;rtelo por WhatsApp, email, Teams o el canal que prefieras.</div>
+
+      <div style="position:relative;margin-bottom:16px">
+        <div id="cu-invite-link"
+          style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 44px 10px 12px;font-size:12px;font-family:var(--mono);color:var(--text2);word-break:break-all;line-height:1.5;min-height:44px"></div>
+        <button onclick="copyInviteLink()" id="btn-copy-link"
+          style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;border-radius:4px;transition:color .15s"
+          title="Copiar link">
+          <svg id="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </button>
+      </div>
+
+      <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--amber);display:flex;gap:10px;align-items:flex-start;margin-bottom:16px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>El link contiene la contrase&#241;a temporal. El usuario debe cambiarla despu&#233;s de su primer ingreso.</span>
+      </div>
+
+      <div class="md-ft" style="justify-content:space-between">
+        <button class="btn btn-g btn-sm" onclick="resetCreateUser()">
+          Crear otro usuario
+        </button>
+        <button class="btn btn-p" onclick="copyInviteLink()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          Copiar link
+        </button>
+      </div>
     </div>
-    <div class="md-ft">
-      <button class="btn btn-g" onclick="closeMo(\'mo-create-user\')">Cancelar</button>
-      <button class="btn btn-p" id="btn-cu" onclick="adminCreateUser()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-        Crear usuario
-      </button>
-    </div>
+
   </div>
 </div>
 
@@ -429,20 +471,31 @@
     <div style="display:flex;flex-direction:column;gap:0;max-height:60vh;overflow-y:auto;padding-right:4px">
 
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);padding:4px 0 8px">Identidad de la app</div>
-      <div class="fg" style="margin-bottom:14px">
+      <div class="fg" style="margin-bottom:10px">
         <div class="fi"><label>Nombre de la app</label><input id="tx-appName" placeholder="EvalPro"/></div>
         <div class="fi"><label>Tagline / slogan</label><input id="tx-appTagline" placeholder="Sistema de evaluaciones..."/></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:14px;align-items:flex-end">
+        <div class="fi" style="flex:1">
+          <label>URL de logo (imagen)</label>
+          <input id="tx-logoUrl" placeholder="https://... (dejar vacío para usar nombre)"/>
+        </div>
+        <div class="fi" style="width:90px">
+          <label>Color principal</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="color" id="tx-accentColor" style="width:44px;height:38px;padding:2px;border-radius:6px;cursor:pointer;border:1px solid var(--border2);background:none"/>
+            <input id="tx-accentHex" placeholder="#6c63ff" style="flex:1;font-family:var(--mono);font-size:12px" oninput="syncColorPicker(this.value)"/>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11px;padding:8px 12px;background:var(--bg3);border-radius:8px;color:var(--text2);margin-bottom:14px">
+        &#128247; Si tienes un logo en GitHub Pages, usa la ruta relativa: <code style="font-family:var(--mono);font-size:11px">logo.png</code>
       </div>
 
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);padding:4px 0 8px;border-top:1px solid var(--border);margin-top:4px">Pantalla de login</div>
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
         <div class="fi"><label>Título</label><input id="tx-loginTitle" placeholder="Iniciar sesión"/></div>
         <div class="fi"><label>Subtítulo / mensaje de acceso</label><input id="tx-loginSubtitle" placeholder="Acceso restringido..."/></div>
-        <div class="fi"><label>Característica 1</label><input id="tx-loginFeature1"/></div>
-        <div class="fi"><label>Característica 2</label><input id="tx-loginFeature2"/></div>
-        <div class="fi"><label>Característica 3</label><input id="tx-loginFeature3"/></div>
-        <div class="fi"><label>Característica 4</label><input id="tx-loginFeature4"/></div>
-        <div class="fi"><label>Característica 5</label><input id="tx-loginFeature5"/></div>
       </div>
 
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);padding:4px 0 8px;border-top:1px solid var(--border);margin-top:4px">Menú lateral</div>

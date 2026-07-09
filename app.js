@@ -11,13 +11,10 @@ let db = null, auth = null, demoMode = false, currentUser = null;
 const TEXT_DEFAULTS = {
   appName:         "EvalPro",
   appTagline:      "Sistema de evaluaciones 360° · 180° · 90°",
+  logoUrl:         "",          // URL de imagen de logo (opcional)
+  accentColor:     "#6c63ff",   // color principal
   loginTitle:      "Iniciar sesión",
   loginSubtitle:   "Acceso restringido — contacta al administrador para obtener credenciales",
-  loginFeature1:   "Evaluaciones multifuente completas",
-  loginFeature2:   "Control de acceso por roles",
-  loginFeature3:   "Reportes con gráficas radar",
-  loginFeature4:   "Sincronización con Firebase en tiempo real",
-  loginFeature5:   "Login con email o Google",
   navDashboard:    "Dashboard",
   navEvaluaciones: "Evaluaciones",
   navEmpleados:    "Empleados",
@@ -39,14 +36,39 @@ async function loadTexts() {
 
 function applyTexts() {
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+  // App name + tagline
   document.querySelectorAll(".logo-mark").forEach(el => el.textContent = TEXTS.appName);
   document.querySelectorAll(".auth-logo").forEach(el => el.textContent = TEXTS.appName);
   document.querySelectorAll(".auth-tagline").forEach(el => el.textContent = TEXTS.appTagline);
+  set("auth-tagline-text", TEXTS.appTagline);
+  const logoText = document.getElementById("auth-logo-text");
+  if (logoText) logoText.textContent = TEXTS.appName;
+
+  // Logo image (if set)
+  const logoImg = document.getElementById("auth-logo-img");
+  if (logoImg) {
+    if (TEXTS.logoUrl) {
+      logoImg.src = TEXTS.logoUrl;
+      logoImg.style.display = "block";
+      if (logoText) logoText.style.display = "none";
+    } else {
+      logoImg.style.display = "none";
+      if (logoText) logoText.style.display = "block";
+    }
+  }
+
+  // Accent color
+  if (TEXTS.accentColor) {
+    document.documentElement.style.setProperty("--accent",  TEXTS.accentColor);
+    document.documentElement.style.setProperty("--accent2", TEXTS.accentColor + "cc");
+  }
+
+  // Login texts
   set("auth-login-title",    TEXTS.loginTitle);
   set("auth-login-subtitle", TEXTS.loginSubtitle);
-  ["loginFeature1","loginFeature2","loginFeature3","loginFeature4","loginFeature5"].forEach((k,i) => {
-    const el = document.getElementById("feat-" + (i+1)); if (el) el.textContent = TEXTS[k];
-  });
+
+  // Nav labels
   set("nav-label-dashboard",    TEXTS.navDashboard);
   set("nav-label-evaluaciones", TEXTS.navEvaluaciones);
   set("nav-label-empleados",    TEXTS.navEmpleados);
@@ -62,18 +84,11 @@ async function saveTexts(updated) {
   toast("Textos guardados ✓");
 }
 
-// ── FIREBASE CONFIG (hardcoded) ─────────────────────
-const FB_CONFIG = {
-  apiKey:            "AIzaSyCcEebYnpqnq2Hm6sg8bP9rCDLB8JmoPTY",
-  authDomain:        "evaluaciones-76787.firebaseapp.com",
-  projectId:         "evaluaciones-76787",
-  storageBucket:     "evaluaciones-76787.firebasestorage.app",
-  messagingSenderId: "990605248069",
-  appId:             "1:990605248069:web:fed93888e3c5f6a3b8852c"
-};
-function saveCfg(cfg) {}
-function loadCfg()    { return FB_CONFIG; }
-function clearCfg()   {}
+// ── FIREBASE CONFIG PERSISTENCE ────────────────────
+const FB_KEY = "evalpro_firebase_cfg";
+function saveCfg(cfg) { try { localStorage.setItem(FB_KEY, JSON.stringify(cfg)); } catch(e) {} }
+function loadCfg()    { try { return JSON.parse(localStorage.getItem(FB_KEY) || "null"); } catch(e) { return null; } }
+function clearCfg()   { try { localStorage.removeItem(FB_KEY); } catch(e) {} }
 
 const DEMO = {
   users: [
@@ -116,23 +131,55 @@ const COMP_SUGG = ["Liderazgo","Comunicación efectiva","Orientación a resultad
 // ── FIREBASE INIT ───────────────────────────────────
 function gv(id) { return (document.getElementById(id)||{}).value || ""; }
 
-// Auto-init con config hardcodeada
-document.addEventListener("DOMContentLoaded", function() {
+function initFirebase() {
+  const cfg = {
+    apiKey:            gv("fb-apiKey"),
+    authDomain:        gv("fb-authDomain"),
+    projectId:         gv("fb-projectId"),
+    storageBucket:     gv("fb-storageBucket"),
+    messagingSenderId: gv("fb-msgSenderId"),
+    appId:             gv("fb-appId"),
+  };
+  if (!cfg.apiKey || !cfg.projectId) { showCfgErr("Completa API Key y Project ID"); return; }
   try {
-    if (!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+    if (!firebase.apps.length) firebase.initializeApp(cfg);
+    db   = firebase.firestore();
+    auth = firebase.auth();
+    saveCfg(cfg); // persist so config screen doesn't show again
+    auth.onAuthStateChanged(handleAuth);
+    document.getElementById("cfg-step").style.display   = "none";
+    document.getElementById("login-step").style.display = "block";
+    document.getElementById("auth-proj").textContent    = "Proyecto: " + cfg.projectId;
+    applyInviteCredentials();
+  } catch(e) { showCfgErr("Error: " + e.message); }
+}
+
+// Auto-init if config already saved in localStorage
+(function autoInit() {
+  const saved = loadCfg();
+  if (!saved) return;
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(saved);
     db   = firebase.firestore();
     auth = firebase.auth();
     auth.onAuthStateChanged(handleAuth);
-  } catch(e) {
-    console.error("Error al inicializar Firebase:", e);
-    showAErr("Error al conectar con Firebase: " + e.message);
-  }
-});
+    document.getElementById("cfg-step").style.display   = "none";
+    document.getElementById("login-step").style.display = "block";
+    const el = document.getElementById("auth-proj");
+    if (el) el.textContent = "Proyecto: " + saved.projectId;
+    applyInviteCredentials();
+  } catch(e) { clearCfg(); }
+})();
 
 function useDemoMode() {
   demoMode = true;
   currentUser = { uid:"u1", name:"María Rodríguez", email:"admin@empresa.com", role:"admin" };
   enterApp();
+}
+
+function openCreateUser() {
+  resetCreateUser();
+  openMo("mo-create-user");
 }
 
 async function handleAuth(fbUser) {
@@ -150,7 +197,6 @@ async function handleAuth(fbUser) {
 
 // ── AUTH ACTIONS ────────────────────────────────────
 async function doLogin() {
-  if (!auth) { showAErr("Firebase no está listo, recarga la página"); return; }
   const email = gv("l-email"), pass = gv("l-pass");
   if (!email || !pass) { showAErr("Completa email y contraseña"); return; }
   setLd("btn-li", true);
@@ -284,12 +330,25 @@ async function bootstrap() {
 }
 
 // ── TEXTOS EDITABLES (admin) ────────────────────────
+function syncColorPicker(hex) {
+  // Keep color picker and hex input in sync
+  const picker = document.getElementById("tx-accentColor");
+  if (picker && /^#[0-9a-fA-F]{6}$/.test(hex)) picker.value = hex;
+}
+
 function openTextos() {
-  // Populate fields with current values
   Object.keys(TEXT_DEFAULTS).forEach(k => {
     const el = document.getElementById("tx-" + k);
     if (el) el.value = TEXTS[k] || TEXT_DEFAULTS[k];
   });
+  // Sync color picker
+  const picker = document.getElementById("tx-accentColor");
+  const hexInp = document.getElementById("tx-accentHex");
+  const color  = TEXTS.accentColor || TEXT_DEFAULTS.accentColor;
+  if (picker) picker.value = color;
+  if (hexInp) hexInp.value = color;
+  // Wire color picker -> hex input live
+  if (picker) picker.oninput = () => { if (hexInp) hexInp.value = picker.value; };
   openMo("mo-textos");
 }
 
@@ -299,6 +358,12 @@ async function saveTextosForm() {
     const el = document.getElementById("tx-" + k);
     if (el) updated[k] = el.value.trim() || TEXT_DEFAULTS[k];
   });
+  // Merge color from either picker or hex input
+  const picker = document.getElementById("tx-accentColor");
+  const hexInp = document.getElementById("tx-accentHex");
+  const hexVal = hexInp?.value.trim();
+  if (hexVal && /^#[0-9a-fA-F]{6}$/.test(hexVal)) updated.accentColor = hexVal;
+  else if (picker) updated.accentColor = picker.value;
   await saveTexts(updated);
   closeMo("mo-textos");
 }
@@ -308,6 +373,10 @@ function resetTextos() {
     const el = document.getElementById("tx-" + k);
     if (el) el.value = TEXT_DEFAULTS[k];
   });
+  const picker = document.getElementById("tx-accentColor");
+  const hexInp = document.getElementById("tx-accentHex");
+  if (picker) picker.value = TEXT_DEFAULTS.accentColor;
+  if (hexInp) hexInp.value = TEXT_DEFAULTS.accentColor;
 }
 
 // ── DASHBOARD ───────────────────────────────────────
@@ -862,12 +931,6 @@ async function loadReportById(evalId) {
 }
 
 // ── USUARIOS ────────────────────────────────────────
-function openCreateUser() {
-  ["cu-name","cu-email","cu-pass"].forEach(id => document.getElementById(id).value = "");
-  document.getElementById("cu-role").value  = "evaluador";
-  document.getElementById("cu-err").style.display = "none";
-  openMo("mo-create-user");
-}
 
 function togglePassVis() {
   const inp  = document.getElementById("cu-pass");
@@ -878,6 +941,86 @@ function togglePassVis() {
   } else {
     inp.type = "password";
     icon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+  }
+}
+
+// ── INVITE LINK ─────────────────────────────────────
+function buildInviteLink(email, pass) {
+  const base   = window.location.href.split("?")[0].split("#")[0];
+  const params = new URLSearchParams({ inv: "1", e: email, p: pass });
+  return `${base}?${params.toString()}`;
+}
+
+function copyInviteLink() {
+  const linkEl = document.getElementById("cu-invite-link");
+  const text   = linkEl.dataset.url || linkEl.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const icon = document.getElementById("copy-icon");
+    icon.innerHTML = `<polyline points="20 6 9 17 4 12"/>`;
+    const btn = document.getElementById("btn-copy-link");
+    btn.style.color = "var(--green)";
+    setTimeout(() => {
+      icon.innerHTML = `<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>`;
+      btn.style.color = "";
+    }, 2000);
+    toast("Link copiado al portapapeles ✓");
+  }).catch(() => {
+    // Fallback for non-HTTPS
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    toast("Link copiado ✓");
+  });
+}
+
+function showInviteLink(name, role, email, pass) {
+  const url = buildInviteLink(email, pass);
+  document.getElementById("cu-form-step").style.display = "none";
+  document.getElementById("cu-link-step").style.display = "block";
+  document.getElementById("cu-success-name").textContent = name + " — cuenta creada";
+  document.getElementById("cu-success-role").textContent = "Rol: " + ROLE_LABELS[role];
+  const linkEl = document.getElementById("cu-invite-link");
+  linkEl.textContent  = url;
+  linkEl.dataset.url  = url;
+}
+
+function resetCreateUser() {
+  ["cu-name","cu-email","cu-pass"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+  const roleEl = document.getElementById("cu-role"); if (roleEl) roleEl.value = "evaluador";
+  const errEl  = document.getElementById("cu-err");  if (errEl)  errEl.style.display = "none";
+  document.getElementById("cu-form-step").style.display = "block";
+  document.getElementById("cu-link-step").style.display = "none";
+  setLd("btn-cu", false);
+}
+
+// Auto-login from invite link (?inv=1&e=...&p=...)
+(function checkInviteParams() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("inv") !== "1") return;
+  const email = params.get("e"), pass = params.get("p");
+  if (!email || !pass) return;
+  // Clean URL so credentials don't stay in history
+  const cleanUrl = window.location.href.split("?")[0];
+  window.history.replaceState({}, document.title, cleanUrl);
+  // Pre-fill login form once it's visible
+  window.inviteCredentials = { email, pass };
+})();
+
+function applyInviteCredentials() {
+  if (!window.inviteCredentials) return;
+  const { email, pass } = window.inviteCredentials;
+  const eEl = document.getElementById("l-email");
+  const pEl = document.getElementById("l-pass");
+  if (eEl) eEl.value = email;
+  if (pEl) pEl.value = pass;
+  window.inviteCredentials = null;
+  // Show a friendly banner
+  const sub = document.getElementById("auth-login-subtitle");
+  if (sub) {
+    sub.textContent = "¡Bienvenido! Tus credenciales ya están listas. Haz clic en Iniciar sesión.";
+    sub.style.color = "var(--green)";
   }
 }
 
@@ -898,29 +1041,25 @@ async function adminCreateUser() {
   if (demoMode) {
     const uid = "u" + (DEMO.users.length + 1);
     DEMO.users.push({ uid, name, email, role });
-    toast(`Usuario "${name}" creado como ${ROLE_LABELS[role]}`);
-    closeMo("mo-create-user");
+    showInviteLink(name, role, email, pass);
     await loadUsers();
-    setLd("btn-cu", false);
     return;
   }
 
   try {
-    // Create user in Firebase Auth using a secondary app instance so admin stays logged in
-    const secondaryApp = firebase.initializeApp(firebase.app().options, "secondary_" + Date.now());
+    const secondaryApp  = firebase.initializeApp(firebase.app().options, "secondary_" + Date.now());
     const secondaryAuth = secondaryApp.auth();
     const cr = await secondaryAuth.createUserWithEmailAndPassword(email, pass);
     await db.collection("users").doc(cr.user.uid).set({ name, email, role, createdAt: new Date().toISOString(), createdBy: currentUser.uid });
     await secondaryAuth.signOut();
     await secondaryApp.delete();
-    toast(`Usuario "${name}" creado como ${ROLE_LABELS[role]}`);
-    closeMo("mo-create-user");
+    showInviteLink(name, role, email, pass);
     await loadUsers();
   } catch(e) {
     cuErr.textContent = fErr(e);
     cuErr.style.display = "block";
+    setLd("btn-cu", false);
   }
-  setLd("btn-cu", false);
 }
 
 async function loadUsers() {
