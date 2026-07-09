@@ -129,10 +129,10 @@ const DEMO = {
 const ROLE_LABELS  = { admin:"Admin", rrhh:"RRHH", evaluador:"Evaluador", evaluado:"Evaluado" };
 const ROLE_CLASSES = { admin:"rp-admin", rrhh:"rp-rrhh", evaluador:"rp-evaluador", evaluado:"rp-evaluado" };
 const PERMS = {
-  admin:     { dashboard:1, evaluaciones:1, empleados:1, formulario:1, reportes:1, usuarios:1, canCreate:1, canDelete:1 },
-  rrhh:      { dashboard:1, evaluaciones:1, empleados:1, formulario:1, reportes:1, usuarios:0, canCreate:1, canDelete:0 },
-  evaluador: { dashboard:1, evaluaciones:0, empleados:0, formulario:1, reportes:0, usuarios:0, canCreate:0, canDelete:0 },
-  evaluado:  { dashboard:1, evaluaciones:0, empleados:0, formulario:0, reportes:1, usuarios:0, canCreate:0, canDelete:0 },
+  admin:     { dashboard:1, evaluaciones:1, empleados:1, formulario:1, reportes:1, usuarios:1, empresas:1, canCreate:1, canDelete:1 },
+  rrhh:      { dashboard:1, evaluaciones:1, empleados:1, formulario:1, reportes:1, usuarios:0, empresas:1, canCreate:1, canDelete:0 },
+  evaluador: { dashboard:1, evaluaciones:0, empleados:0, formulario:1, reportes:0, usuarios:0, empresas:0, canCreate:0, canDelete:0 },
+  evaluado:  { dashboard:1, evaluaciones:0, empleados:0, formulario:0, reportes:1, usuarios:0, empresas:0, canCreate:0, canDelete:0 },
 };
 const COMP_SUGG = ["Liderazgo","Comunicación efectiva","Orientación a resultados","Trabajo en equipo",
   "Innovación","Gestión del tiempo","Adaptabilidad","Resolución de problemas","Pensamiento estratégico","Orientación al cliente"];
@@ -251,7 +251,7 @@ function applyRole() {
   document.getElementById("sb-role").innerHTML   = `<span class="rp ${ROLE_CLASSES[role]}">${ROLE_LABELS[role]}</span>`;
   document.getElementById("dash-welcome").textContent = "Bienvenido, " + currentUser.name.split(" ")[0];
 
-  const navMap = { "ni-evaluaciones":"evaluaciones", "ni-empleados":"empleados", "ni-formulario":"formulario", "ni-reportes":"reportes", "ni-usuarios":"usuarios" };
+  const navMap = { "ni-evaluaciones":"evaluaciones", "ni-empleados":"empleados", "ni-formulario":"formulario", "ni-reportes":"reportes", "ni-usuarios":"usuarios", "ni-empresas":"empresas" };
   Object.entries(navMap).forEach(([navId, perm]) => {
     const el = document.getElementById(navId);
     if (el) el.classList.toggle("hid", !p[perm]);
@@ -315,8 +315,9 @@ function genId(col) {
 
 // ── BOOTSTRAP ───────────────────────────────────────
 async function bootstrap() {
-  await Promise.all([loadDash(), loadEvalTable(), loadEmpTable(), loadSelects()]);
-  if ((PERMS[currentUser.role] || {}).usuarios) await loadUsers();
+  await Promise.all([loadDash(), loadEvalTable(), loadEmpTable(), loadSelects(), loadEmpresasSelect()]);
+  if ((PERMS[currentUser.role] || {}).usuarios)  await loadUsers();
+  if ((PERMS[currentUser.role] || {}).empresas)  await loadEmpresasTable();
 }
 
 // ── TEXTOS EDITABLES (admin) ────────────────────────
@@ -862,21 +863,25 @@ async function loadReportById(evalId) {
   document.getElementById("rep-eval").value = evalId;
   const [evs, emps] = await Promise.all([dbAll("evaluaciones"), dbAll("empleados")]);
   const ev = evs.find(e => e.id === evalId); if (!ev) return;
-  document.getElementById("rep-body").style.display  = "block";
-  document.getElementById("rep-empty").style.display = "none";
+  document.getElementById("rep-body").style.display      = "block";
+  document.getElementById("rep-empty").style.display     = "none";
+  document.getElementById("rep-export-btns").style.display = "flex";
 
   const rArr = Object.values(ev.respuestas||{});
   const cs   = ev.competencias;
   const avg  = {};
   cs.forEach(c => {
-    const key  = c.replace(/\s+/g,"_");
-    const vals = rArr.map(r => r.scores?.[key]).filter(v => v != null);
+    const key  = c.replace(/[\s]+/g,"_");
+    const vals = rArr.map(r => r.scores?.[key] ?? r.scores?.[c]).filter(v => v != null);
     avg[c] = vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : 0;
   });
 
   const globalScore = Object.values(avg).length
     ? (Object.values(avg).reduce((a,b) => a+b, 0) / Object.values(avg).length).toFixed(2)
     : "—";
+
+  // Store for PDF/Excel export
+  currentReportData = { ev, emps, avg, globalScore, rArr };
 
   document.getElementById("rep-score").textContent = globalScore;
   const lbls = ["Insuficiente","Regular","Aceptable","Bueno","Sobresaliente"];
@@ -1394,6 +1399,357 @@ async function deleteUser(uid, name) {
   }
   toast(`Usuario "${name}" eliminado`);
   await loadUsers();
+}
+
+// ── EMPRESAS ────────────────────────────────────────
+let currentReportData = null; // stored for export
+
+function syncEmpColor(pickerId, hex) {
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) document.getElementById(pickerId).value = hex;
+}
+
+function updateEmpresaPreview() {
+  const nombre  = document.getElementById("empresa-nombre").value  || "Nombre empresa";
+  const eslogan = document.getElementById("empresa-eslogan").value || "";
+  const color1  = document.getElementById("empresa-color1-hex").value || "#6c63ff";
+  const logo    = document.getElementById("empresa-logo").value    || "";
+  const footer  = document.getElementById("empresa-footer").value  || "Pie de página del reporte";
+
+  document.getElementById("empresa-preview-header").style.background = color1;
+  document.getElementById("empresa-preview-nombre").textContent      = nombre;
+  document.getElementById("empresa-preview-eslogan").textContent     = eslogan;
+  document.getElementById("empresa-preview-footer").textContent      = footer;
+
+  const logoEl = document.getElementById("empresa-preview-logo");
+  if (logo) { logoEl.src = logo; logoEl.style.display = "block"; }
+  else       { logoEl.style.display = "none"; }
+}
+
+// Wire preview updates
+["empresa-nombre","empresa-eslogan","empresa-color1-hex","empresa-color2-hex","empresa-logo","empresa-footer"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("input", updateEmpresaPreview);
+});
+["empresa-color1","empresa-color2"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("input", () => {
+    const hexId = id + "-hex";
+    document.getElementById(hexId).value = el.value;
+    updateEmpresaPreview();
+  });
+});
+
+function openNewEmpresa() {
+  document.getElementById("emp-modal-title").textContent = "Nueva empresa";
+  document.getElementById("empresa-edit-id").value       = "";
+  document.getElementById("empresa-err").style.display   = "none";
+  ["empresa-nombre","empresa-eslogan","empresa-logo","empresa-footer","empresa-contacto"].forEach(id => {
+    document.getElementById(id).value = "";
+  });
+  document.getElementById("empresa-color1").value     = "#6c63ff";
+  document.getElementById("empresa-color1-hex").value = "#6c63ff";
+  document.getElementById("empresa-color2").value     = "#1a1a2e";
+  document.getElementById("empresa-color2-hex").value = "#1a1a2e";
+  updateEmpresaPreview();
+  openMo("mo-empresa");
+}
+
+function openEditEmpresa(id) {
+  dbAll("empresas").then(list => {
+    const emp = list.find(e => e.id === id); if (!emp) return;
+    document.getElementById("emp-modal-title").textContent = "Editar empresa";
+    document.getElementById("empresa-edit-id").value       = id;
+    document.getElementById("empresa-err").style.display   = "none";
+    document.getElementById("empresa-nombre").value    = emp.nombre    || "";
+    document.getElementById("empresa-eslogan").value   = emp.eslogan   || "";
+    document.getElementById("empresa-logo").value      = emp.logo      || "";
+    document.getElementById("empresa-footer").value    = emp.footer    || "";
+    document.getElementById("empresa-contacto").value  = emp.contacto  || "";
+    const c1 = emp.color1 || "#6c63ff", c2 = emp.color2 || "#1a1a2e";
+    document.getElementById("empresa-color1").value     = c1;
+    document.getElementById("empresa-color1-hex").value = c1;
+    document.getElementById("empresa-color2").value     = c2;
+    document.getElementById("empresa-color2-hex").value = c2;
+    updateEmpresaPreview();
+    openMo("mo-empresa");
+  });
+}
+
+async function saveEmpresa() {
+  const nombre = gv("empresa-nombre");
+  if (!nombre) {
+    const e = document.getElementById("empresa-err");
+    e.textContent = "El nombre es obligatorio"; e.style.display = "block"; return;
+  }
+  const editId = gv("empresa-edit-id");
+  const data   = {
+    nombre,
+    eslogan:  gv("empresa-eslogan"),
+    logo:     gv("empresa-logo"),
+    color1:   gv("empresa-color1-hex") || "#6c63ff",
+    color2:   gv("empresa-color2-hex") || "#1a1a2e",
+    footer:   gv("empresa-footer"),
+    contacto: gv("empresa-contacto"),
+    updatedAt: new Date().toISOString(),
+  };
+  const id = editId || genId("empresas");
+  if (!editId) data.createdAt = new Date().toISOString();
+  await dbSet("empresas", id, data);
+  toast(editId ? "Empresa actualizada ✓" : "Empresa creada ✓");
+  closeMo("mo-empresa");
+  await loadEmpresasTable();
+  await loadEmpresasSelect();
+}
+
+async function loadEmpresasTable() {
+  const list = await dbAll("empresas");
+  const ul   = document.getElementById("empresas-list");
+  if (!list.length) {
+    ul.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text3)">
+      <p>Sin empresas. Crea la primera para poder personalizar los reportes.</p></div>`;
+    return;
+  }
+  ul.innerHTML = list.map(emp => {
+    const c1 = emp.color1 || "#6c63ff";
+    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--bg3);border-radius:var(--radius);margin-bottom:10px">
+      <div style="width:42px;height:42px;border-radius:8px;background:${c1};display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">
+        ${emp.logo
+          ? `<img src="${emp.logo}" style="width:42px;height:42px;object-fit:contain" onerror="this.style.display='none'"/>`
+          : `<span style="font-size:16px;font-weight:700;color:#fff">${(emp.nombre||"?")[0].toUpperCase()}</span>`}
+      </div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:500">${emp.nombre}</div>
+        <div style="font-size:12px;color:var(--text3)">${emp.eslogan||""}</div>
+        ${emp.footer ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic">${emp.footer}</div>` : ""}
+      </div>
+      <div style="display:flex;gap:6px">
+        <div style="display:flex;gap:4px;align-items:center;margin-right:6px">
+          <div style="width:16px;height:16px;border-radius:50%;background:${c1};border:2px solid rgba(0,0,0,.1)" title="Color primario"></div>
+          <div style="width:16px;height:16px;border-radius:50%;background:${emp.color2||"#1a1a2e"};border:2px solid rgba(0,0,0,.1)" title="Color secundario"></div>
+        </div>
+        <button class="btn btn-g btn-sm" onclick="openEditEmpresa('${emp.id}')">Editar</button>
+        <button class="btn btn-del btn-sm" onclick="deleteEmpresa('${emp.id}')">Eliminar</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function deleteEmpresa(id) {
+  if (!confirm("¿Eliminar esta empresa?")) return;
+  await dbDel("empresas", id);
+  toast("Empresa eliminada");
+  await loadEmpresasTable();
+  await loadEmpresasSelect();
+}
+
+async function loadEmpresasSelect() {
+  const list = await dbAll("empresas");
+  const sel  = document.getElementById("rep-empresa");
+  if (!sel) return;
+  sel.innerHTML = `<option value="">— sin branding —</option>` +
+    list.map(e => `<option value="${e.id}">${e.nombre}</option>`).join("");
+}
+
+// ── EXPORT: helpers ─────────────────────────────────
+async function getEmpresaForReport() {
+  const selEl = document.getElementById("rep-empresa");
+  if (!selEl || !selEl.value) return null;
+  const list = await dbAll("empresas");
+  return list.find(e => e.id === selEl.value) || null;
+}
+
+function buildReportHeader(empresa, evalName, empNombre, tipo) {
+  if (!empresa) return `<div style="margin-bottom:20px"><h1 style="font-size:20px;margin:0">${evalName}</h1><p style="color:#666;margin:4px 0 0">${empNombre} · Evaluación ${tipo}°</p></div>`;
+  const c1 = empresa.color1 || "#6c63ff";
+  const c2 = empresa.color2 || "#1a1a2e";
+  return `
+    <div style="background:${c1};padding:20px 28px;border-radius:10px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:16px">
+        ${empresa.logo ? `<img src="${empresa.logo}" style="height:48px;border-radius:6px;background:#fff;padding:4px" onerror="this.style.display='none'"/>` : ""}
+        <div>
+          <div style="font-size:20px;font-weight:700;color:#fff">${empresa.nombre}</div>
+          ${empresa.eslogan ? `<div style="font-size:12px;color:rgba(255,255,255,.8)">${empresa.eslogan}</div>` : ""}
+        </div>
+      </div>
+      <div style="text-align:right;color:rgba(255,255,255,.9)">
+        <div style="font-size:14px;font-weight:600">${evalName}</div>
+        <div style="font-size:12px;margin-top:2px">${empNombre} · Evaluación ${tipo}°</div>
+        <div style="font-size:11px;margin-top:2px">${new Date().toLocaleDateString("es-CO",{year:"numeric",month:"long",day:"numeric"})}</div>
+      </div>
+    </div>`;
+}
+
+function buildReportFooter(empresa) {
+  if (!empresa) return "";
+  return `<div style="margin-top:32px;padding:10px 18px;border-top:2px solid ${empresa.color1||"#6c63ff"};display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#888">
+    <span>${empresa.footer||""}</span>
+    <span>${empresa.contacto||""}</span>
+  </div>`;
+}
+
+// ── EXPORT: PDF ──────────────────────────────────────
+async function exportReportPDF() {
+  if (!currentReportData) { toast("Carga un reporte primero","err"); return; }
+  const { ev, emps, avg, globalScore, rArr } = currentReportData;
+  const empresa  = await getEmpresaForReport();
+  const emp      = emps.find(e => e.id === ev.empleadoId) || { nombre:"—", cargo:"—" };
+  const c1       = empresa?.color1 || "#6c63ff";
+  const scoreLabel = ["Insuficiente","Regular","Aceptable","Bueno","Sobresaliente"][Math.min(4,Math.floor(parseFloat(globalScore)-1))] || "—";
+
+  // Build competencias bars
+  const compBars = ev.competencias.map(c => {
+    const a   = avg[c] || 0;
+    const pct = Math.round(a / 5 * 100);
+    const col = a >= 4 ? "#059669" : a >= 3 ? "#d97706" : "#dc2626";
+    return `<div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:13px">${c}</span>
+        <span style="font-size:13px;font-weight:600;color:${col}">${a.toFixed(1)} / 5.0</span>
+      </div>
+      <div style="background:#e5e7eb;border-radius:4px;height:8px">
+        <div style="width:${pct}%;height:100%;background:${col};border-radius:4px"></div>
+      </div>
+    </div>`;
+  }).join("");
+
+  // Respondentes table
+  const respRows = (ev.evaluadores||[]).map(ev2 => {
+    const eEmp = emps.find(e => e.id === ev2.id) || { nombre:"—" };
+    const done = rArr.some(r => r.relacion === ev2.relacion);
+    return `<tr>
+      <td style="padding:6px 10px;font-size:12px">${eEmp.nombre}</td>
+      <td style="padding:6px 10px;font-size:12px;color:#666">${ev2.relacion}</td>
+      <td style="padding:6px 10px;font-size:12px;color:${done?"#059669":"#d97706"}">${done?"✓ Completado":"⏳ Pendiente"}</td>
+    </tr>`;
+  }).join("");
+
+  // Fuentes summary
+  const fuentes     = ["jefe","autoevaluacion","par","subordinado","cliente"];
+  const fuenteNames = ["Jefe directo","Autoevaluación","Pares","Subordinados","Clientes"];
+  const fuenteRows  = fuentes.map((f, i) => {
+    const rs  = rArr.filter(r => r.relacion === f);
+    if (!rs.length) return "";
+    const all = rs.flatMap(r => Object.values(r.scores||{}));
+    const avg2 = all.length ? (all.reduce((a,b)=>a+b,0)/all.length).toFixed(2) : "—";
+    return `<tr><td style="padding:6px 10px;font-size:12px">${fuenteNames[i]}</td><td style="padding:6px 10px;font-size:12px;font-weight:600">${avg2}</td><td style="padding:6px 10px;font-size:12px;color:#666">${rs.length} respuesta${rs.length!==1?"s":""}</td></tr>`;
+  }).filter(Boolean).join("");
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#1a1a2e;max-width:900px;margin:0 auto">
+      ${buildReportHeader(empresa, ev.nombre, emp.nombre + " — " + emp.cargo, ev.tipo)}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+        <div style="background:#f8f8fc;border-radius:10px;padding:20px;text-align:center">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:8px">Puntaje Global</div>
+          <div style="font-size:52px;font-weight:300;color:${c1}">${globalScore}</div>
+          <div style="font-size:13px;color:#666">/ 5.0 — ${scoreLabel}</div>
+        </div>
+        <div style="background:#f8f8fc;border-radius:10px;padding:20px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:12px">Por fuente evaluadora</div>
+          <table style="width:100%;border-collapse:collapse">${fuenteRows}</table>
+        </div>
+      </div>
+
+      <div style="margin-bottom:24px">
+        <div style="font-size:14px;font-weight:600;margin-bottom:14px;padding-bottom:6px;border-bottom:2px solid ${c1}">Detalle por competencia</div>
+        ${compBars}
+      </div>
+
+      <div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid ${c1}">Estado de respondentes</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#f0f0f7">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#888">Evaluador</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#888">Relación</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#888">Estado</th>
+          </tr></thead>
+          <tbody>${respRows}</tbody>
+        </table>
+      </div>
+
+      ${buildReportFooter(empresa)}
+    </div>`;
+
+  const printArea = document.getElementById("pdf-print-area");
+  printArea.innerHTML = html;
+  printArea.style.display = "block";
+  window.print();
+  setTimeout(() => { printArea.style.display = "none"; printArea.innerHTML = ""; }, 1000);
+}
+
+// ── EXPORT: Excel ────────────────────────────────────
+async function exportReportExcel() {
+  if (!currentReportData) { toast("Carga un reporte primero","err"); return; }
+  if (typeof XLSX === "undefined") { toast("Librería XLSX no disponible","err"); return; }
+
+  const { ev, emps, avg, globalScore, rArr } = currentReportData;
+  const empresa = await getEmpresaForReport();
+  const emp     = emps.find(e => e.id === ev.empleadoId) || { nombre:"—", cargo:"—" };
+  const wb      = XLSX.utils.book_new();
+  const dateStr = new Date().toLocaleDateString("es-CO");
+
+  // ── Sheet 1: Resumen ──
+  const resumenData = [
+    ["REPORTE DE EVALUACIÓN"],
+    empresa ? ["Empresa:", empresa.nombre] : [],
+    ["Evaluación:", ev.nombre],
+    ["Evaluado:", emp.nombre],
+    ["Cargo:", emp.cargo],
+    ["Tipo:", `${ev.tipo}°`],
+    ["Fecha:", dateStr],
+    ["Puntaje global:", parseFloat(globalScore) || "Sin datos"],
+    [],
+    ["PUNTAJE POR COMPETENCIA"],
+    ["Competencia", "Promedio", "Calificación"],
+    ...ev.competencias.map(c => {
+      const a = avg[c] || 0;
+      const label = a >= 4 ? "Bueno/Sobresaliente" : a >= 3 ? "Aceptable" : "Por mejorar";
+      return [c, parseFloat(a.toFixed(2)), label];
+    }),
+    [],
+    ["PUNTAJE POR FUENTE"],
+    ["Fuente", "Promedio", "# Respuestas"],
+    ...["jefe","autoevaluacion","par","subordinado","cliente"].map((f,i) => {
+      const names = ["Jefe directo","Autoevaluación","Pares","Subordinados","Clientes"];
+      const rs    = rArr.filter(r => r.relacion === f);
+      if (!rs.length) return null;
+      const all   = rs.flatMap(r => Object.values(r.scores||{}));
+      const avg2  = all.length ? parseFloat((all.reduce((a,b)=>a+b,0)/all.length).toFixed(2)) : 0;
+      return [names[i], avg2, rs.length];
+    }).filter(Boolean),
+  ].filter(r => r.length);
+
+  const ws1 = XLSX.utils.aoa_to_sheet(resumenData);
+  ws1["!cols"] = [{ wch:30 }, { wch:16 }, { wch:22 }];
+  XLSX.utils.book_append_sheet(wb, ws1, "Resumen");
+
+  // ── Sheet 2: Respuestas detalladas ──
+  const headers2 = ["Relación", "Fecha", ...ev.competencias, "Comentario"];
+  const rows2    = rArr.map(r => [
+    r.relacion,
+    r.fecha ? new Date(r.fecha).toLocaleDateString("es-CO") : "—",
+    ...ev.competencias.map(c => r.scores?.[c.replace(/\s+/g,"_")] || r.scores?.[c] || ""),
+    r.comentario || "",
+  ]);
+  const ws2 = XLSX.utils.aoa_to_sheet([headers2, ...rows2]);
+  ws2["!cols"] = [{ wch:16 }, { wch:12 }, ...ev.competencias.map(() => ({ wch:12 })), { wch:40 }];
+  XLSX.utils.book_append_sheet(wb, ws2, "Respuestas detalladas");
+
+  // ── Sheet 3: Respondentes ──
+  const ws3 = XLSX.utils.aoa_to_sheet([
+    ["Evaluador", "Relación", "Estado"],
+    ...(ev.evaluadores||[]).map(ev2 => {
+      const eEmp = emps.find(e => e.id === ev2.id) || { nombre:"—" };
+      const done = rArr.some(r => r.relacion === ev2.relacion);
+      return [eEmp.nombre, ev2.relacion, done ? "Completado" : "Pendiente"];
+    }),
+  ]);
+  ws3["!cols"] = [{ wch:28 }, { wch:16 }, { wch:14 }];
+  XLSX.utils.book_append_sheet(wb, ws3, "Respondentes");
+
+  const filename = `Reporte_${(empresa?.nombre||"EvalPro").replace(/\s/g,"_")}_${emp.nombre.split(" ")[0]}_${new Date().toISOString().split("T")[0]}.xlsx`;
+  XLSX.writeFile(wb, filename);
+  toast("Excel descargado ✓");
 }
 
 // ── INIT ────────────────────────────────────────────

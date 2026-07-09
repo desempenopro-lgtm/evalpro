@@ -80,6 +80,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 20V10M12 20V4M6 20v-6"/></svg><span id="nav-label-reportes">Reportes</span>
       </button>
       <div class="nav-sec hid" id="ni-sec-admin">Administración</div>
+      <button class="nav-item hid" id="ni-empresas" onclick="showPage('empresas')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span id="nav-label-empresas">Empresas</span>
+      </button>
       <button class="nav-item hid" id="ni-usuarios" onclick="showPage('usuarios')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 15c-3.31 0-6 1.34-6 3v1h12v-1c0-1.66-2.69-3-6-3z"/><circle cx="12" cy="8" r="4"/><path d="M20 15v1M20 8a4 4 0 010 8"/></svg><span id="nav-label-usuarios">Usuarios</span>
       </button>
@@ -181,8 +184,21 @@
 
     <!-- REPORTES -->
     <div class="page" id="page-reportes">
-      <div class="pg-hdr"><div><div class="pg-title">Reportes</div><div class="pg-sub">Resultados por empleado</div></div></div>
-      <div style="margin-bottom:24px"><div class="fi" style="max-width:340px"><label>Seleccionar evaluación</label><select id="rep-eval" onchange="loadReport()"><option value="">— selecciona —</option></select></div></div>
+      <div class="pg-hdr">
+        <div><div class="pg-title">Reportes</div><div class="pg-sub">Resultados por empleado</div></div>
+        <div style="display:flex;gap:8px" id="rep-export-btns" style="display:none">
+          <button class="btn btn-g" onclick="exportReportExcel()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>Excel
+          </button>
+          <button class="btn btn-p" onclick="exportReportPDF()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg>PDF
+          </button>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;align-items:flex-end">
+        <div class="fi" style="max-width:340px"><label>Seleccionar evaluación</label><select id="rep-eval" onchange="loadReport()"><option value="">— selecciona —</option></select></div>
+        <div class="fi" style="max-width:260px"><label>Empresa (para el reporte)</label><select id="rep-empresa"><option value="">— sin branding —</option></select></div>
+      </div>
       <div id="rep-body" style="display:none">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
           <div class="card"><div style="font-size:14px;font-weight:500;margin-bottom:16px">Puntuación por competencia</div><div style="position:relative;height:320px"><canvas id="chartRadar"></canvas></div></div>
@@ -202,6 +218,17 @@
         </div>
       </div>
       <div id="rep-empty" style="text-align:center;padding:60px;color:var(--text3)"><p>Selecciona una evaluación para ver el reporte</p></div>
+    </div>
+
+    <!-- EMPRESAS -->
+    <div class="page" id="page-empresas">
+      <div class="pg-hdr">
+        <div><div class="pg-title">Empresas</div><div class="pg-sub">Branding para reportes por cliente</div></div>
+        <button class="btn btn-p" onclick="openNewEmpresa()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nueva empresa
+        </button>
+      </div>
+      <div class="card"><div id="empresas-list"><p style="color:var(--text3);font-size:14px">Cargando...</p></div></div>
     </div>
 
     <!-- USUARIOS -->
@@ -227,6 +254,73 @@
   </main>
 </div>
 </div>
+
+
+<!-- MODAL: Nueva / Editar empresa -->
+<div class="mo" id="mo-empresa">
+  <div class="md" style="max-width:520px">
+    <div class="md-hdr">
+      <div class="md-title" id="emp-modal-title">Nueva empresa</div>
+      <button class="btn btn-g btn-sm" onclick="closeMo('mo-empresa')">✕</button>
+    </div>
+    <div class="auth-err" id="empresa-err"></div>
+    <div class="fg">
+      <div class="fi full"><label>Nombre de la empresa</label><input id="empresa-nombre" placeholder="Acme Corp S.A.S."/></div>
+      <div class="fi full"><label>Eslogan / descripción corta</label><input id="empresa-eslogan" placeholder="Innovando el futuro"/></div>
+      <div class="fi"><label>Color primario</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="empresa-color1" value="#6c63ff" style="width:44px;height:38px;padding:2px;border-radius:6px;cursor:pointer;border:1px solid var(--border2);background:none" oninput="document.getElementById('empresa-color1-hex').value=this.value"/>
+          <input id="empresa-color1-hex" placeholder="#6c63ff" style="flex:1;font-family:var(--mono);font-size:12px" oninput="syncEmpColor('empresa-color1',this.value)"/>
+        </div>
+      </div>
+      <div class="fi"><label>Color secundario</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="empresa-color2" value="#1a1a2e" style="width:44px;height:38px;padding:2px;border-radius:6px;cursor:pointer;border:1px solid var(--border2);background:none" oninput="document.getElementById('empresa-color2-hex').value=this.value"/>
+          <input id="empresa-color2-hex" placeholder="#1a1a2e" style="flex:1;font-family:var(--mono);font-size:12px" oninput="syncEmpColor('empresa-color2',this.value)"/>
+        </div>
+      </div>
+      <div class="fi full"><label>URL del logo</label><input id="empresa-logo" placeholder="https://... o ruta relativa logo.png"/></div>
+      <div class="fi full"><label>Pie de página del reporte</label><input id="empresa-footer" placeholder="Confidencial · Uso interno · © 2025 Acme Corp"/></div>
+      <div class="fi full"><label>Dirección / contacto (opcional)</label><input id="empresa-contacto" placeholder="Calle 123 #45-67, Medellín · info@acme.com"/></div>
+    </div>
+
+    <!-- Preview -->
+    <div style="margin-top:18px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      <div id="empresa-preview-header" style="padding:14px 18px;display:flex;align-items:center;gap:12px;background:#6c63ff">
+        <img id="empresa-preview-logo" src="" alt="" style="height:36px;display:none;border-radius:4px"/>
+        <div>
+          <div id="empresa-preview-nombre" style="font-size:15px;font-weight:600;color:#fff">Vista previa</div>
+          <div id="empresa-preview-eslogan" style="font-size:11px;color:rgba(255,255,255,.75)"></div>
+        </div>
+      </div>
+      <div style="padding:10px 18px;background:var(--bg3);font-size:11px;color:var(--text3)" id="empresa-preview-footer">Pie de página del reporte</div>
+    </div>
+
+    <div class="md-ft">
+      <button class="btn btn-g" onclick="closeMo('mo-empresa')">Cancelar</button>
+      <button class="btn btn-p" onclick="saveEmpresa()">Guardar empresa</button>
+    </div>
+    <input type="hidden" id="empresa-edit-id"/>
+  </div>
+</div>
+
+<!-- PDF print container (hidden, populated on export) -->
+<div id="pdf-print-area" style="display:none"></div>
+
+<style>
+@media print {
+  body > *:not(#pdf-print-area) { display: none !important; }
+  #pdf-print-area {
+    display: block !important;
+    font-family: Arial, sans-serif;
+    color: #1a1a2e;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .pdf-page-break { page-break-before: always; }
+  @page { margin: 15mm; }
+}
+</style>
 
 <!-- MODAL: Carga masiva de usuarios -->
 <div class="mo" id="mo-bulk-users">
