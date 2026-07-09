@@ -32,27 +32,11 @@
 
     <!-- Card contenedor -->
     <div class="auth-card">
-    <!-- Paso 1: Config Firebase -->
-    <div id="cfg-step">
-      <div class="auth-title">Configurar Firebase</div>
-      <div class="auth-sub">Ingresa los datos de tu proyecto para continuar</div>
-      <div class="inp-wrap"><label>API Key</label><input id="fb-apiKey" placeholder="AIzaSy..."/></div>
-      <div class="inp-wrap"><label>Auth Domain</label><input id="fb-authDomain" placeholder="proyecto.firebaseapp.com"/></div>
-      <div class="inp-wrap"><label>Project ID</label><input id="fb-projectId" placeholder="mi-proyecto-id"/></div>
-      <div class="inp-wrap"><label>Storage Bucket</label><input id="fb-storageBucket" placeholder="proyecto.appspot.com"/></div>
-      <div class="inp-wrap"><label>Messaging Sender ID</label><input id="fb-msgSenderId" placeholder="123456789"/></div>
-      <div class="inp-wrap"><label>App ID</label><input id="fb-appId" placeholder="1:123:web:abc..."/></div>
-      <div class="auth-err" id="cfg-err"></div>
-      <button class="btn-login-full" onclick="initFirebase()">Conectar y continuar</button>
-      <div class="auth-divider">o</div>
-      <button class="btn-google" onclick="useDemoMode()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-        Usar modo demo (sin Firebase)
-      </button>
-    </div>
+    <!-- Config step hidden — Firebase config is hardcoded in app.js -->
+    <div id="cfg-step" style="display:none"></div>
 
     <!-- Paso 2: Solo Login -->
-    <div id="login-step" style="display:none">
+    <div id="login-step">
       <div class="auth-title" id="auth-login-title">Iniciar sesión</div>
       <div class="auth-sub" id="auth-login-subtitle">Acceso restringido — contacta al administrador para obtener credenciales</div>
       <div id="auth-proj" style="display:none"></div>
@@ -234,11 +218,7 @@
         </div>
       </div>
       <div class="card"><div id="users-list"><p style="color:var(--text3);font-size:14px">Cargando...</p></div></div>
-      <div style="margin-top:16px;text-align:right">
-        <button onclick="forgetConfig()" style="background:none;border:none;font-size:12px;color:var(--text3);cursor:pointer;font-family:var(--font);text-decoration:underline">
-          Olvidar configuración de Firebase
-        </button>
-      </div>
+
     </div>
 
   </main>
