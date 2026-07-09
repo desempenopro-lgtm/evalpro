@@ -1404,6 +1404,107 @@ async function deleteUser(uid, name) {
 // ── EMPRESAS ────────────────────────────────────────
 let currentReportData = null; // stored for export
 
+// ── LOGO UPLOAD (base64) ────────────────────────────
+let currentLogoBase64 = ""; // holds base64 or empty string
+
+function handleLogoDrop(e) {
+  e.preventDefault();
+  document.getElementById("logo-dropzone").style.borderColor = "";
+  const file = e.dataTransfer?.files[0] || null;
+  if (file) handleLogoFile(file);
+}
+
+function handleLogoFile(file) {
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    showLogoError("El archivo debe ser una imagen (PNG, JPG, SVG, WebP)"); return;
+  }
+  const MAX = 200 * 1024; // 200 KB
+  if (file.size > MAX) {
+    showLogoError(`El archivo pesa ${(file.size/1024).toFixed(0)} KB. El máximo es 200 KB. Comprime la imagen antes de subir.`); return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    currentLogoBase64 = e.target.result; // data:image/...;base64,...
+    // Clear URL field — base64 takes priority
+    document.getElementById("empresa-logo").value = "";
+    renderLogoThumb(currentLogoBase64, file.name);
+    updateEmpresaPreview();
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderLogoThumb(src, filename) {
+  const thumb   = document.getElementById("logo-preview-thumb");
+  const label   = document.getElementById("logo-file-name");
+  const clearBtn= document.getElementById("btn-clear-logo");
+  thumb.innerHTML = `<img src="${src}" style="width:48px;height:48px;object-fit:contain;border-radius:4px"/>`;
+  label.textContent = filename || "Logo cargado";
+  clearBtn.style.display = "block";
+}
+
+function clearLogo() {
+  currentLogoBase64 = "";
+  document.getElementById("empresa-logo").value = "";
+  document.getElementById("logo-preview-thumb").innerHTML =
+    `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+  document.getElementById("logo-file-name").textContent = "Arrastra el logo o haz clic para seleccionar";
+  document.getElementById("btn-clear-logo").style.display = "none";
+  document.getElementById("logo-file-input").value = "";
+  updateEmpresaPreview();
+}
+
+function onLogoUrlInput(val) {
+  // If user types a URL, clear any uploaded base64
+  if (val.trim()) {
+    currentLogoBase64 = "";
+    document.getElementById("logo-file-name").textContent = "Arrastra el logo o haz clic para seleccionar";
+    document.getElementById("logo-preview-thumb").innerHTML =
+      `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+    document.getElementById("btn-clear-logo").style.display = "none";
+  }
+  updateEmpresaPreview();
+}
+
+function showLogoError(msg) {
+  const label = document.getElementById("logo-file-name");
+  label.textContent = "⚠ " + msg;
+  label.style.color = "var(--red)";
+  setTimeout(() => {
+    label.textContent = "Arrastra el logo o haz clic para seleccionar";
+    label.style.color = "";
+  }, 4000);
+}
+
+function getLogoValue() {
+  // Returns base64 if uploaded, else URL field value, else ""
+  return currentLogoBase64 || document.getElementById("empresa-logo").value.trim();
+}
+
+function resetLogoField() {
+  clearLogo();
+}
+
+function loadLogoIntoField(logoValue) {
+  // When editing an existing empresa — restore the logo state
+  if (!logoValue) { clearLogo(); return; }
+  if (logoValue.startsWith("data:")) {
+    // It's a stored base64
+    currentLogoBase64 = logoValue;
+    renderLogoThumb(logoValue, "Logo guardado");
+    document.getElementById("empresa-logo").value = "";
+  } else {
+    // It's a URL
+    currentLogoBase64 = "";
+    document.getElementById("empresa-logo").value = logoValue;
+    // Show a small thumb from URL
+    const thumb = document.getElementById("logo-preview-thumb");
+    thumb.innerHTML = `<img src="${logoValue}" style="width:48px;height:48px;object-fit:contain;border-radius:4px" onerror="this.parentElement.innerHTML='<svg width=22 height=22 viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'var(--text3)\' stroke-width=\'1.5\'><rect x=3 y=3 width=18 height=18 rx=2/></svg>'"/>`;
+    document.getElementById("logo-file-name").textContent = "URL externa";
+    document.getElementById("btn-clear-logo").style.display = "block";
+  }
+}
+
 function syncEmpColor(pickerId, hex) {
   if (/^#[0-9a-fA-F]{6}$/.test(hex)) document.getElementById(pickerId).value = hex;
 }
@@ -1412,7 +1513,7 @@ function updateEmpresaPreview() {
   const nombre  = document.getElementById("empresa-nombre").value  || "Nombre empresa";
   const eslogan = document.getElementById("empresa-eslogan").value || "";
   const color1  = document.getElementById("empresa-color1-hex").value || "#6c63ff";
-  const logo    = document.getElementById("empresa-logo").value    || "";
+  const logo    = getLogoValue();
   const footer  = document.getElementById("empresa-footer").value  || "Pie de página del reporte";
 
   document.getElementById("empresa-preview-header").style.background = color1;
@@ -1446,6 +1547,7 @@ function openNewEmpresa() {
   ["empresa-nombre","empresa-eslogan","empresa-logo","empresa-footer","empresa-contacto"].forEach(id => {
     document.getElementById(id).value = "";
   });
+  resetLogoField();
   document.getElementById("empresa-color1").value     = "#6c63ff";
   document.getElementById("empresa-color1-hex").value = "#6c63ff";
   document.getElementById("empresa-color2").value     = "#1a1a2e";
@@ -1462,9 +1564,9 @@ function openEditEmpresa(id) {
     document.getElementById("empresa-err").style.display   = "none";
     document.getElementById("empresa-nombre").value    = emp.nombre    || "";
     document.getElementById("empresa-eslogan").value   = emp.eslogan   || "";
-    document.getElementById("empresa-logo").value      = emp.logo      || "";
     document.getElementById("empresa-footer").value    = emp.footer    || "";
     document.getElementById("empresa-contacto").value  = emp.contacto  || "";
+    loadLogoIntoField(emp.logo || "");
     const c1 = emp.color1 || "#6c63ff", c2 = emp.color2 || "#1a1a2e";
     document.getElementById("empresa-color1").value     = c1;
     document.getElementById("empresa-color1-hex").value = c1;
@@ -1485,7 +1587,7 @@ async function saveEmpresa() {
   const data   = {
     nombre,
     eslogan:  gv("empresa-eslogan"),
-    logo:     gv("empresa-logo"),
+    logo:     getLogoValue(),
     color1:   gv("empresa-color1-hex") || "#6c63ff",
     color2:   gv("empresa-color2-hex") || "#1a1a2e",
     footer:   gv("empresa-footer"),
