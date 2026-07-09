@@ -934,6 +934,295 @@ function togglePassVis() {
   }
 }
 
+// ── CARGA MASIVA DE USUARIOS ────────────────────────
+const VALID_ROLES   = ["admin","rrhh","evaluador","evaluado"];
+const ROLE_ALIASES  = {
+  "administrador":"admin","administrator":"admin",
+  "recursos humanos":"rrhh","hr":"rrhh","human resources":"rrhh",
+  "evaluator":"evaluador","respondiente":"evaluador",
+  "evaluated":"evaluado","evaluatee":"evaluado",
+};
+
+let bulkUsersPreview = [];   // parsed rows ready to confirm
+let bulkUsersResults = [];   // created users with links (for Excel download)
+
+function openBulkUsers() {
+  resetBulkUsers();
+  openMo("mo-bulk-users");
+}
+
+function resetBulkUsers() {
+  bulkUsersPreview = [];
+  bulkUsersResults = [];
+  document.getElementById("bu-input").value         = "";
+  document.getElementById("bu-dropzone").style.display   = "flex";
+  document.getElementById("bu-error").style.display      = "none";
+  document.getElementById("bu-preview").style.display    = "none";
+  document.getElementById("bu-step-upload").style.display   = "block";
+  document.getElementById("bu-step-progress").style.display = "none";
+  document.getElementById("bu-step-result").style.display   = "none";
+  document.getElementById("btn-bu-confirm").style.display   = "none";
+  document.getElementById("bu-modal-title").textContent     = "Carga masiva de usuarios";
+}
+
+function handleBulkUsersDrop(e) {
+  e.preventDefault();
+  document.getElementById("bu-dropzone").classList.remove("dz-over");
+  const file = e.dataTransfer?.files[0] || e.target.files[0];
+  if (file) processBulkUsersFile(file);
+}
+
+function processBulkUsersFile(file) {
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (!["csv","xlsx","xls"].includes(ext)) {
+    showBuError("Formato no soportado. Usa .xlsx, .xls o .csv"); return;
+  }
+  const reader = new FileReader();
+  if (ext === "csv") {
+    reader.onload = e => parseBulkUsersCSV(e.target.result);
+    reader.readAsText(file, "UTF-8");
+  } else {
+    reader.onload = e => parseBulkUsersXLSX(e.target.result);
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+function parseBulkUsersCSV(text) {
+  const delim = text.split(";").length > text.split(",").length ? ";" : ",";
+  const lines  = text.trim().split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) { showBuError("Archivo vacío o sin datos"); return; }
+  const headers = lines[0].split(delim).map(h => h.trim().replace(/^"|"$/g,"").toLowerCase());
+  const rows    = lines.slice(1).map(line => {
+    const cols = line.split(delim).map(c => c.trim().replace(/^"|"$/g,""));
+    const obj  = {};
+    headers.forEach((h, i) => obj[h] = cols[i] || "");
+    return obj;
+  });
+  buildBulkUsersPreview(headers, rows);
+}
+
+function parseBulkUsersXLSX(buffer) {
+  if (typeof XLSX === "undefined") { showBuError("Librería XLSX no disponible. Usa CSV."); return; }
+  const wb   = XLSX.read(buffer, { type:"array" });
+  const ws   = wb.Sheets[wb.SheetNames[0]];
+  const data = XLSX.utils.sheet_to_json(ws, { defval:"" });
+  if (!data.length) { showBuError("La hoja está vacía"); return; }
+  const headers = Object.keys(data[0]).map(h => h.toLowerCase().trim());
+  const rows    = data.map(r => {
+    const obj = {};
+    Object.entries(r).forEach(([k,v]) => obj[k.toLowerCase().trim()] = String(v||"").trim());
+    return obj;
+  });
+  buildBulkUsersPreview(headers, rows);
+}
+
+function resolveUserCol(headers, aliases) {
+  return headers.find(h => aliases.includes(h)) || null;
+}
+
+function normalizeRole(raw) {
+  const v = (raw||"").toLowerCase().trim();
+  if (VALID_ROLES.includes(v)) return v;
+  return ROLE_ALIASES[v] || "evaluador"; // default
+}
+
+function generatePassword() {
+  const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$";
+  let pass = "";
+  for (let i = 0; i < 10; i++) pass += chars[Math.floor(Math.random() * chars.length)];
+  return pass;
+}
+
+function buildBulkUsersPreview(headers, rows) {
+  const colNombre = resolveUserCol(headers, ["nombre","name","nombre completo","full name","empleado"]);
+  const colEmail  = resolveUserCol(headers, ["email","correo","mail","correo electrónico","e-mail"]);
+  const colRol    = resolveUserCol(headers, ["rol","role","perfil","tipo","tipo usuario"]);
+
+  if (!colEmail) { showBuError(`No encontré columna "Email". Columnas detectadas: ${headers.join(", ")}`); return; }
+
+  bulkUsersPreview = rows
+    .filter(r => (r[colEmail]||"").trim())
+    .map((r, i) => {
+      const email = (r[colEmail]||"").trim().toLowerCase();
+      const name  = colNombre ? (r[colNombre]||"").trim() : email.split("@")[0];
+      const role  = normalizeRole(colRol ? r[colRol] : "evaluador");
+      const pass  = generatePassword();
+      return { _row: i+2, name, email, role, pass, _status:"pending" };
+    });
+
+  if (!bulkUsersPreview.length) { showBuError("No se encontraron filas con email válido"); return; }
+
+  // Check for duplicate emails in file
+  const emails = bulkUsersPreview.map(u => u.email);
+  const dupes  = emails.filter((e, i) => emails.indexOf(e) !== i);
+  if (dupes.length) {
+    showBuError(`Emails duplicados en el archivo: ${[...new Set(dupes)].join(", ")}`); return;
+  }
+
+  renderBulkUsersPreview();
+}
+
+function renderBulkUsersPreview() {
+  document.getElementById("bu-error").style.display = "none";
+  const total   = bulkUsersPreview.length;
+  const preview = bulkUsersPreview.slice(0, 6);
+  const more    = total > 6 ? `<tr><td colspan="3" style="padding:8px 10px;font-size:12px;color:var(--text3);text-align:center">... y ${total-6} usuarios más</td></tr>` : "";
+
+  const roleColors = { admin:"var(--red)", rrhh:"var(--accent)", evaluador:"var(--blue)", evaluado:"var(--green)" };
+
+  document.getElementById("bu-preview").innerHTML = `
+    <div style="font-size:13px;font-weight:500;margin-bottom:10px">
+      Vista previa — <span style="color:var(--accent)">${total} usuarios</span> a crear
+    </div>
+    <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--border);margin-bottom:4px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--bg3)">
+          <th style="padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);text-align:left">Nombre</th>
+          <th style="padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);text-align:left">Email</th>
+          <th style="padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);text-align:left">Rol</th>
+        </tr></thead>
+        <tbody>
+          ${preview.map(u => `<tr>
+            <td style="padding:8px 12px;font-size:13px;font-weight:500;color:var(--text)">${u.name}</td>
+            <td style="padding:8px 12px;font-size:12px;font-family:var(--mono);color:var(--text2)">${u.email}</td>
+            <td style="padding:8px 12px"><span style="font-size:11px;padding:2px 8px;border-radius:10px;background:${roleColors[u.role]}18;color:${roleColors[u.role]};font-weight:500">${ROLE_LABELS[u.role]||u.role}</span></td>
+          </tr>`).join("")}
+          ${more}
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-top:6px">&#128274; Las contraseñas se generarán automáticamente (10 caracteres aleatorios)</div>`;
+
+  document.getElementById("bu-preview").style.display    = "block";
+  document.getElementById("btn-bu-confirm").style.display = "inline-flex";
+}
+
+async function confirmBulkUsers() {
+  if (!bulkUsersPreview.length) return;
+  const total = bulkUsersPreview.length;
+
+  // Switch to progress step
+  document.getElementById("bu-step-upload").style.display   = "none";
+  document.getElementById("bu-step-progress").style.display = "block";
+  document.getElementById("bu-modal-title").textContent     = "Creando usuarios...";
+
+  const progressBar   = document.getElementById("bu-progress-bar");
+  const progressCount = document.getElementById("bu-progress-count");
+  const progressLabel = document.getElementById("bu-progress-label");
+
+  bulkUsersResults = [];
+  const errors = [];
+  let done = 0;
+
+  for (const user of bulkUsersPreview) {
+    progressLabel.textContent = `Creando: ${user.name}`;
+    progressCount.textContent = `${done} / ${total}`;
+    progressBar.style.width   = `${Math.round(done / total * 100)}%`;
+
+    if (demoMode) {
+      const uid = "u" + (DEMO.users.length + 1);
+      DEMO.users.push({ uid, name: user.name, email: user.email, role: user.role });
+      bulkUsersResults.push({ ...user, link: buildInviteLink(user.email, user.pass) });
+    } else {
+      try {
+        const appName     = "secondary_" + Date.now() + "_" + done;
+        const secondaryApp  = firebase.initializeApp(firebase.app().options, appName);
+        const secondaryAuth = secondaryApp.auth();
+        const cr = await secondaryAuth.createUserWithEmailAndPassword(user.email, user.pass);
+        await db.collection("users").doc(cr.user.uid).set({
+          name: user.name, email: user.email, role: user.role,
+          createdAt: new Date().toISOString(), createdBy: currentUser.uid, bulkImport: true,
+        });
+        await secondaryAuth.signOut();
+        await secondaryApp.delete();
+        bulkUsersResults.push({ ...user, link: buildInviteLink(user.email, user.pass) });
+      } catch(e) {
+        errors.push({ email: user.email, error: fErr(e) });
+      }
+    }
+
+    done++;
+    // Small delay to avoid Firebase rate limiting
+    if (!demoMode) await new Promise(r => setTimeout(r, 300));
+  }
+
+  progressBar.style.width   = "100%";
+  progressCount.textContent = `${done} / ${total}`;
+
+  // Show result step
+  await new Promise(r => setTimeout(r, 400));
+  document.getElementById("bu-step-progress").style.display = "none";
+  document.getElementById("bu-step-result").style.display   = "block";
+  document.getElementById("bu-modal-title").textContent     = "Carga completada";
+
+  const ok = bulkUsersResults.length;
+  document.getElementById("bu-result-title").textContent = `${ok} usuario${ok!==1?"s":""} creado${ok!==1?"s":""}`;
+  document.getElementById("bu-result-sub").textContent   = errors.length
+    ? `${errors.length} usuario${errors.length!==1?"s":""} no pudieron crearse`
+    : "Todos los usuarios fueron creados exitosamente";
+
+  if (errors.length) {
+    document.getElementById("bu-errors-wrap").style.display = "block";
+    document.getElementById("bu-errors-title").textContent  = `${errors.length} error${errors.length!==1?"es":""}:`;
+    document.getElementById("bu-errors-list").innerHTML     = errors.map(e =>
+      `${e.email} → ${e.error}`).join("<br>");
+  }
+
+  await loadUsers();
+}
+
+function downloadUserTemplate() {
+  const csv = "\uFEFFNombre,Email,Rol\nAna García,ana.garcia@empresa.com,evaluador\nCarlos López,carlos.lopez@empresa.com,evaluado\nMaría Torres,maria.torres@empresa.com,rrhh\n";
+  const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = "plantilla_usuarios.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadInviteLinks() {
+  if (!bulkUsersResults.length) return;
+  if (typeof XLSX === "undefined") {
+    // Fallback to CSV
+    const header = "Nombre,Email,Rol,Link de invitación\n";
+    const rows   = bulkUsersResults.map(u =>
+      `"${u.name}","${u.email}","${ROLE_LABELS[u.role]||u.role}","${u.link}"`).join("\n");
+    const blob   = new Blob(["\uFEFF" + header + rows], { type:"text/csv;charset=utf-8;" });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement("a");
+    a.href = url; a.download = "links_invitacion.csv"; a.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  const wsData = [
+    ["Nombre","Email","Rol","Contraseña temporal","Link de invitación"],
+    ...bulkUsersResults.map(u => [u.name, u.email, ROLE_LABELS[u.role]||u.role, u.pass, u.link]),
+  ];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Column widths
+  ws["!cols"] = [{ wch:25 }, { wch:35 }, { wch:14 }, { wch:16 }, { wch:80 }];
+
+  // Style header row
+  const headerStyle = { font:{ bold:true }, fill:{ fgColor:{ rgb:"EEF0FF" } } };
+  ["A1","B1","C1","D1","E1"].forEach(cell => {
+    if (ws[cell]) ws[cell].s = headerStyle;
+  });
+
+  XLSX.utils.book_append_sheet(wb, ws, "Links de invitación");
+  XLSX.writeFile(wb, `links_invitacion_${new Date().toISOString().split("T")[0]}.xlsx`);
+  toast("Excel descargado ✓");
+}
+
+function showBuError(msg) {
+  const el = document.getElementById("bu-error");
+  el.textContent = msg; el.style.display = "block";
+  document.getElementById("bu-preview").style.display    = "none";
+  document.getElementById("btn-bu-confirm").style.display = "none";
+}
+
 // ── INVITE LINK ─────────────────────────────────────
 function buildInviteLink(email, pass) {
   const base   = window.location.href.split("?")[0].split("#")[0];
