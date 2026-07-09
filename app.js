@@ -177,7 +177,7 @@ async function handleAuth(fbUser) {
   try {
     const doc  = await db.collection("users").doc(fbUser.uid).get();
     const data = doc.exists ? doc.data() : {};
-    currentUser = { uid: fbUser.uid, name: data.name || fbUser.displayName || fbUser.email, email: fbUser.email, role: data.role || "evaluador" };
+    currentUser = { uid: fbUser.uid, name: data.name || fbUser.displayName || fbUser.email, email: fbUser.email, role: data.role || "evaluador", empresaId: data.empresaId || "" };
     enterApp();
   } catch(e) {
     currentUser = { uid: fbUser.uid, name: fbUser.displayName || fbUser.email, email: fbUser.email, role: "evaluador" };
@@ -420,17 +420,24 @@ async function loadDash() {
 
 // ── EVALUACIONES ────────────────────────────────────
 async function loadEvalTable() {
-  const [evs, emps] = await Promise.all([dbAll("evaluaciones"), dbAll("empleados")]);
+  const [evs, emps, empresas] = await Promise.all([dbAll("evaluaciones"), dbAll("empleados"), dbAll("empresas")]);
+  // Filter by empresa for restricted roles
+  const userEmpresaId = currentUser?.empresaId || "";
+  const role = currentUser?.role;
+  const filtEvs = (role === "evaluado" || role === "evaluador") && userEmpresaId
+    ? evs.filter(e => e.empresaId === userEmpresaId) : evs;
   const canDel = PERMS[currentUser.role]?.canDelete;
   const tb = document.getElementById("eval-tbody");
-  if (!evs.length) { tb.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text3)">Sin evaluaciones.</td></tr>`; return; }
-  tb.innerHTML = evs.map(e => {
+  if (!filtEvs.length) { tb.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text3)">Sin evaluaciones.</td></tr>`; return; }
+  tb.innerHTML = filtEvs.map(e => {
     const emp  = emps.find(x => x.id === e.empleadoId) || { nombre:"—", cargo:"—" };
     const done = Object.keys(e.respuestas||{}).length;
     const tot  = (e.evaluadores||[]).length;
     const pct  = tot ? Math.round(done / tot * 100) : 0;
+    const empEmpresa = empresas.find(x => x.id === e.empresaId);
     return `<tr>
       <td class="tdn">${e.nombre}</td>
+      <td style="font-size:12px;color:var(--text2)">${empEmpresa ? empEmpresa.nombre : "—"}</td>
       <td><span class="badge b${e.tipo}">${e.tipo}°</span></td>
       <td><div style="font-size:13px">${emp.nombre}</div><div style="font-size:11px;color:var(--text3)">${emp.cargo}</div></td>
       <td style="min-width:120px"><div class="pb" style="margin-bottom:4px"><div class="pf" style="width:${pct}%"></div></div><div style="font-size:11px;color:var(--text3)">${done}/${tot}</div></td>
@@ -489,7 +496,7 @@ async function loadJefeSelect() {
 
 async function saveEmp() {
   const n = gv("emp-n"); if (!n) { toast("El nombre es obligatorio", "err"); return; }
-  await dbSet("empleados", genId("empleados"), { nombre:n, email:gv("emp-e"), cargo:gv("emp-c"), area:gv("emp-a"), jefeId:gv("emp-j"), nivel:gv("emp-l") });
+  await dbSet("empleados", genId("empleados"), { nombre:n, email:gv("emp-e"), cargo:gv("emp-c"), area:gv("emp-a"), jefeId:gv("emp-j"), nivel:gv("emp-l"), empresaId:gv("emp-empresa") });
   toast("Empleado guardado"); closeMo("mo-emp");
   await loadEmpTable(); await loadSelects();
   ["emp-n","emp-e","emp-c","emp-a"].forEach(id => document.getElementById(id).value = "");
@@ -678,7 +685,7 @@ async function confirmImport() {
     const saved = [];
     for (const emp of importPreview) {
       const id = genId("empleados");
-      await dbSet("empleados", id, { nombre:emp.nombre, email:emp.email, cargo:emp.cargo, area:emp.area, nivel:emp.nivel, jefeId:"" });
+      await dbSet("empleados", id, { nombre:emp.nombre, email:emp.email, cargo:emp.cargo, area:emp.area, nivel:emp.nivel, jefeId:"", empresaId:gv("emp-empresa")||"" });
       saved.push({ ...emp, id });
     }
     // Second pass: resolve jefe names → IDs and update
@@ -716,12 +723,35 @@ function downloadTemplate() {
 
 // ── SELECTORS ───────────────────────────────────────
 async function loadSelects() {
-  const emps = await dbAll("empleados");
-  document.getElementById("ev-emp").innerHTML = `<option value="">Selecciona...</option>` + emps.map(e => `<option value="${e.id}">${e.nombre} — ${e.cargo||""}</option>`).join("");
-  const evs     = await dbAll("evaluaciones");
-  const evalOpts = evs.map(e => `<option value="${e.id}">${e.nombre}</option>`).join("");
+  // Empresas selectors (wizard, create user, bulk import, reportes)
+  const empresas    = await dbAll("empresas");
+  const empresaOpts = `<option value="">— sin empresa —</option>` + empresas.map(e => `<option value="${e.id}">${e.nombre}</option>`).join("");
+  ["ev-empresa","cu-empresa","bu-empresa","rep-empresa"].forEach(id => {
+    const el = document.getElementById(id); if (el) el.innerHTML = empresaOpts;
+  });
+
+  // Empleados — filtered by selected empresa in wizard, or all
+  const empresaId = gv("ev-empresa");
+  const allEmps   = await dbAll("empleados");
+  const filtEmps  = empresaId ? allEmps.filter(e => e.empresaId === empresaId) : allEmps;
+  document.getElementById("ev-emp").innerHTML = `<option value="">Selecciona...</option>` +
+    filtEmps.map(e => `<option value="${e.id}">${e.nombre} — ${e.cargo||""}</option>`).join("");
+
+  // Evaluaciones — filtered by current user's empresa if evaluado/evaluador
+  const role = currentUser?.role;
+  const userEmpresaId = currentUser?.empresaId || "";
+  const evs = await dbAll("evaluaciones");
+  const filtEvs = (role === "evaluado" || role === "evaluador") && userEmpresaId
+    ? evs.filter(e => e.empresaId === userEmpresaId)
+    : evs;
+  const evalOpts = filtEvs.map(e => `<option value="${e.id}">${e.nombre}</option>`).join("");
   document.getElementById("form-eval").innerHTML = `<option value="">— selecciona —</option>` + evalOpts;
   document.getElementById("rep-eval").innerHTML  = `<option value="">— selecciona —</option>` + evalOpts;
+}
+
+function onEvalEmpresaChange() {
+  // When empresa changes in wizard, reload empleados dropdown filtered
+  loadSelects();
 }
 
 // ── WIZARD ──────────────────────────────────────────
@@ -729,9 +759,10 @@ let curStep = 1, comps = [];
 
 function openNewEval() {
   curStep = 1; comps = [];
-  document.getElementById("ev-nombre").value = "";
-  document.getElementById("ev-tipo").value   = "360";
-  document.getElementById("ev-emp").value    = "";
+  document.getElementById("ev-nombre").value  = "";
+  document.getElementById("ev-tipo").value    = "360";
+  document.getElementById("ev-emp").value     = "";
+  document.getElementById("ev-empresa").value = "";
   updateWiz(); openMo("mo-eval");
 }
 
@@ -796,7 +827,7 @@ async function createEval() {
     emps.filter(e => e.jefeId === empId && e.id !== empId).slice(0,3).forEach(e => evList.push({ id:e.id, relacion:"subordinado" }));
     emps.filter(e => e.jefeId === evaluado?.jefeId && e.id !== empId && e.id !== evaluado?.jefeId).slice(0,3).forEach(e => evList.push({ id:e.id, relacion:"par" }));
   }
-  const ev = { nombre:gv("ev-nombre"), tipo, empleadoId:empId, inicio:gv("ev-start"), cierre:gv("ev-end"), estado:"activa", competencias:[...comps], evaluadores:evList, respuestas:{}, creadoEn:new Date().toISOString() };
+  const ev = { nombre:gv("ev-nombre"), tipo, empleadoId:empId, empresaId:gv("ev-empresa"), inicio:gv("ev-start"), cierre:gv("ev-end"), estado:"activa", competencias:[...comps], evaluadores:evList, respuestas:{}, creadoEn:new Date().toISOString() };
   await dbSet("evaluaciones", genId("evaluaciones"), ev);
   toast("Evaluación creada ✓"); closeMo("mo-eval");
   await loadEvalTable(); await loadDash(); await loadSelects();
@@ -1119,6 +1150,10 @@ async function confirmBulkUsers() {
   const errors = [];
   let done = 0;
 
+  const bulkEmpresaId = gv("bu-empresa");
+  // Attach empresaId to each user before loop
+  bulkUsersPreview.forEach(u => u.empresaId = bulkEmpresaId);
+
   for (const user of bulkUsersPreview) {
     progressLabel.textContent = `Creando: ${user.name}`;
     progressCount.textContent = `${done} / ${total}`;
@@ -1126,7 +1161,7 @@ async function confirmBulkUsers() {
 
     if (demoMode) {
       const uid = "u" + (DEMO.users.length + 1);
-      DEMO.users.push({ uid, name: user.name, email: user.email, role: user.role });
+      DEMO.users.push({ uid, name: user.name, email: user.email, role: user.role, empresaId: user.empresaId||"" });
       bulkUsersResults.push({ ...user, link: buildInviteLink(user.email, user.pass) });
     } else {
       try {
@@ -1136,6 +1171,7 @@ async function confirmBulkUsers() {
         const cr = await secondaryAuth.createUserWithEmailAndPassword(user.email, user.pass);
         await db.collection("users").doc(cr.user.uid).set({
           name: user.name, email: user.email, role: user.role,
+          empresaId: user.empresaId || "",
           createdAt: new Date().toISOString(), createdBy: currentUser.uid, bulkImport: true,
         });
         await secondaryAuth.signOut();
@@ -1324,7 +1360,7 @@ async function adminCreateUser() {
 
   if (demoMode) {
     const uid = "u" + (DEMO.users.length + 1);
-    DEMO.users.push({ uid, name, email, role });
+    DEMO.users.push({ uid, name, email, role, empresaId: gv("cu-empresa") });
     showInviteLink(name, role, email, pass);
     await loadUsers();
     return;
@@ -1334,7 +1370,7 @@ async function adminCreateUser() {
     const secondaryApp  = firebase.initializeApp(firebase.app().options, "secondary_" + Date.now());
     const secondaryAuth = secondaryApp.auth();
     const cr = await secondaryAuth.createUserWithEmailAndPassword(email, pass);
-    await db.collection("users").doc(cr.user.uid).set({ name, email, role, createdAt: new Date().toISOString(), createdBy: currentUser.uid });
+    await db.collection("users").doc(cr.user.uid).set({ name, email, role, empresaId: gv("cu-empresa"), createdAt: new Date().toISOString(), createdBy: currentUser.uid });
     await secondaryAuth.signOut();
     await secondaryApp.delete();
     showInviteLink(name, role, email, pass);
@@ -1352,11 +1388,20 @@ async function loadUsers() {
   else { const snap = await db.collection("users").get(); users = snap.docs.map(d => ({ uid:d.id, ...d.data() })); }
 
   const ul = document.getElementById("users-list");
-  if (!users.length) { ul.innerHTML = `<p style="color:var(--text3);font-size:14px">Sin usuarios. Crea el primero.</p>`; return; }
-  ul.innerHTML = users.map(u => {
+  if (!filtUsers.length) { ul.innerHTML = `<p style="color:var(--text3);font-size:14px">Sin usuarios para mostrar.</p>`; return; }
+  const empresas = await dbAll("empresas");
+  const userEmpresaId = currentUser?.empresaId || "";
+  const uRole = currentUser?.role;
+  // Admins see all; RRHH sees only their empresa; others see nothing
+  const filtUsers = uRole === "admin" ? users
+    : uRole === "rrhh" && userEmpresaId ? users.filter(u => u.empresaId === userEmpresaId)
+    : [];
+
+  ul.innerHTML = filtUsers.map(u => {
     const ini  = (u.name||u.email||"?").split(" ").slice(0,2).map(w => w[0]).join("").toUpperCase();
     const role = u.role || "evaluador";
     const isMe = currentUser.uid === u.uid;
+    const emp  = empresas.find(e => e.id === u.empresaId);
     return `<div class="uc">
       <div class="avatar">${ini}</div>
       <div class="uc-i">
@@ -1364,6 +1409,7 @@ async function loadUsers() {
         <div class="uc-e">${u.email||"—"}</div>
       </div>
       <span class="rp ${ROLE_CLASSES[role]}">${ROLE_LABELS[role]}</span>
+      ${emp ? `<span style="font-size:11px;color:var(--text3);padding:2px 6px;background:var(--bg3);border-radius:6px">${emp.nombre}</span>` : ""}
       ${isMe
         ? `<span style="font-size:12px;color:var(--text3);padding:6px 8px">Tú</span>`
         : `<div style="display:flex;gap:6px">
@@ -1645,11 +1691,15 @@ async function deleteEmpresa(id) {
 }
 
 async function loadEmpresasSelect() {
-  const list = await dbAll("empresas");
-  const sel  = document.getElementById("rep-empresa");
-  if (!sel) return;
-  sel.innerHTML = `<option value="">— sin branding —</option>` +
-    list.map(e => `<option value="${e.id}">${e.nombre}</option>`).join("");
+  const list    = await dbAll("empresas");
+  const opts    = list.map(e => `<option value="${e.id}">${e.nombre}</option>`).join("");
+  const noOpt   = `<option value="">— sin empresa —</option>`;
+  const noBrand = `<option value="">— sin branding —</option>`;
+  ["ev-empresa","cu-empresa","bu-empresa"].forEach(id => {
+    const el = document.getElementById(id); if (el) el.innerHTML = noOpt + opts;
+  });
+  const repEl = document.getElementById("rep-empresa");
+  if (repEl) repEl.innerHTML = noBrand + opts;
 }
 
 // ── EXPORT: helpers ─────────────────────────────────

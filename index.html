@@ -128,7 +128,7 @@
         </button>
       </div>
       <div class="card"><div class="tw"><table>
-        <thead><tr><th>Nombre</th><th>Tipo</th><th>Evaluado</th><th>Progreso</th><th>Estado</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Empresa</th><th>Tipo</th><th>Evaluado</th><th>Progreso</th><th>Estado</th><th>Acciones</th></tr></thead>
         <tbody id="eval-tbody"></tbody>
       </table></div></div>
     </div>
@@ -358,6 +358,14 @@
 
     <!-- PASO 1: subir archivo -->
     <div id="bu-step-upload">
+      <div style="display:flex;gap:12px;margin-bottom:16px;align-items:flex-end">
+        <div class="fi" style="flex:1">
+          <label>Empresa para estos usuarios</label>
+          <select id="bu-empresa">
+            <option value="">— sin empresa —</option>
+          </select>
+        </div>
+      </div>
       <p style="font-size:13px;color:var(--text2);margin-bottom:16px">
         Sube un archivo Excel o CSV con las columnas <strong>Nombre</strong>, <strong>Email</strong> y <strong>Rol</strong>.
         El sistema genera contraseñas automáticamente y al finalizar puedes descargar todos los links de invitación.
@@ -502,6 +510,11 @@
     <div id="ws-1">
       <div class="fg">
         <div class="fi full"><label>Nombre de la evaluación</label><input id="ev-nombre" placeholder="Ej: Evaluación Q1 2025 — Gerencia Comercial"/></div>
+        <div class="fi"><label>Empresa cliente</label>
+          <select id="ev-empresa" onchange="onEvalEmpresaChange()">
+            <option value="">— sin empresa —</option>
+          </select>
+        </div>
         <div class="fi"><label>Tipo</label>
           <select id="ev-tipo"><option value="360">360° — Multifuente completo</option><option value="180">180° — Jefe + Auto</option><option value="90">90° — Jefe directo</option></select>
         </div>
@@ -543,6 +556,7 @@
       <div class="fi"><label>Email corporativo</label><input id="emp-e" type="email" placeholder="ana@empresa.com"/></div>
       <div class="fi"><label>Cargo</label><input id="emp-c" placeholder="Gerente de Marketing"/></div>
       <div class="fi"><label>Área</label><input id="emp-a" placeholder="Mercadeo"/></div>
+      <div class="fi"><label>Empresa</label><select id="emp-empresa"><option value="">— sin empresa —</option></select></div>
       <div class="fi"><label>Jefe directo</label><select id="emp-j"><option value="">Sin jefe</option></select></div>
       <div class="fi"><label>Nivel</label>
         <select id="emp-l">
@@ -568,6 +582,7 @@
     <div id="cu-form-step">
       <p style="font-size:13px;color:var(--text2);margin-bottom:18px">Completa los datos. Al crear el usuario obtendr&#225;s un link de invitaci&#243;n para compartirlo.</p>
       <div class="auth-err" id="cu-err"></div>
+      <div class="inp-wrap"><label>Empresa</label><select id="cu-empresa"><option value="">— sin empresa —</option></select></div>
       <div class="inp-wrap"><label>Nombre completo</label><input id="cu-name" placeholder="Ana Garc&#237;a"/></div>
       <div class="inp-wrap"><label>Email</label><input id="cu-email" type="email" placeholder="ana@empresa.com"/></div>
       <div class="inp-wrap"><label>Contrase&#241;a temporal</label>
